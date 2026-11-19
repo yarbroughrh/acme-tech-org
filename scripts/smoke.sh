@@ -66,7 +66,7 @@ read -r status _ <<< "$(request POST /api/auth/refresh "${TOKENS[exec]}")"
 check "exec renews session" 200 "$status"
 
 echo "-- portfolio (role-based access)"
-declare -A EXPECT_PROJECTS=([admin]=200 [pmo]=200 [pm]=200 [analyst]=200 [exec]=200)
+declare -A EXPECT_PROJECTS=([admin]=403 [pmo]=200 [pm]=200 [analyst]=200 [exec]=200)
 for role in admin pmo pm analyst exec; do
   read -r status json <<< "$(request GET '/api/projects?page_size=5' "${TOKENS[$role]}")"
   check "$role GET /api/projects" "${EXPECT_PROJECTS[$role]}" "$status"
@@ -109,6 +109,20 @@ check "assigned analyst can view the project" 200 "$status"
 check "analyst may propose but not edit" "true false" "$(echo "$json" | jq -r '"\(.project.permissions.can_propose) \(.project.permissions.can_edit_plan)"')"
 read -r status _ <<< "$(request POST "/api/projects/$cpr/milestones" "${TOKENS[analyst]}" '{"name":"x","due_date":"2026-12-01","status":"NOT_STARTED"}')"
 check "analyst direct edit is 403" 403 "$status"
+
+echo "-- lead decisions"
+read -r status _ <<< "$(request GET /api/users/audit "${TOKENS[admin]}")"
+check "admin reads the access audit" 200 "$status"
+read -r status _ <<< "$(request GET /api/projects/lookups "${TOKENS[admin]}")"
+check "admin has no project data (lookups)" 403 "$status"
+read -r status json <<< "$(request GET '/api/projects?q=HR%20Self-Service%20Portal' "${TOKENS[pm]}")"
+hr=$(echo "$json" | jq -r '.items[0].id'); hv=$(echo "$json" | jq -r '.items[0].version')
+read -r status _ <<< "$(request PUT "/api/projects/$hr" "${TOKENS[pm]}" "{\"lifecycle_status\":\"ON_HOLD\",\"version\":$hv}")"
+check "pm cannot change lifecycle status" 403 "$status"
+read -r status _ <<< "$(request PUT "/api/projects/$hr" "${TOKENS[pm]}" "{\"approved_budget\":1,\"rebaseline_reason\":\"x\",\"version\":$hv}")"
+check "pm cannot rebaseline" 403 "$status"
+read -r status _ <<< "$(request GET "/api/projects/00000000-0000-4000-8000-000000000000" "${TOKENS[pm]}")"
+check "unknown project is a JSON 404 (not masked by CloudFront)" 404 "$status"
 
 echo ""
 echo "Result: $PASS passed, $FAIL failed"

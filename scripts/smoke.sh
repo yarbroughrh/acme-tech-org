@@ -143,6 +143,14 @@ check "pm queue has an approval waiting" true "$(echo "$json" | jq -r '[.items[]
 read -r status json <<< "$(request GET /api/me/work-queue "${TOKENS[admin]}")"
 check "admin queue has no project items" true "$(echo "$json" | jq -r '[.items[] | select(.project != null)] | length == 0')"
 
+echo "-- executive dashboard"
+read -r status json <<< "$(request GET /api/portfolio/summary "${TOKENS[exec]}")"
+check "exec reads the dashboard summary" 200 "$status"
+check "dashboard counts Active projects only" true "$(echo "$json" | jq -r '(.health_counts.RED + .health_counts.AMBER + .health_counts.GREEN) > 0 and .excluded_projects > 0')"
+check "budget table has a variance %" true "$(echo "$json" | jq -r '.totals.variance_pct != null')"
+read -r status _ <<< "$(request GET /api/portfolio/summary "${TOKENS[admin]}")"
+check "admin has no dashboard" 403 "$status"
+
 echo ""
 echo "Result: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

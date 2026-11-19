@@ -235,7 +235,6 @@ Cut to deliver a deployed, tested MVP by the 16:00 freeze. Each cut lists what w
 | Portfolio UI polish pass (summary tiles, row stripes, reason line, group headers, budget bar, sticky header, richer sidebar/header) | Lead swapped it for the minimum dashboard the brief requires | Build from the specification already written; reason summaries are already in the list API |
 | Weekly spend **entry screens and endpoints** (Budget tab, PMO record form, cumulative burn chart) | Time | The data model, Monday rule, unique week/category, seed history, budget health and the PMO "spend missing" queue item are live; add `GET/POST/DELETE /projects/{id}/spend` (upsert) and the Budget tab |
 | Budget-burn chart (weekly cumulative actual vs planned, monthly roll-up) | Time; the minimum dashboard uses a budget-against-plan table per department instead | Reuse engine metrics; add the weekly series endpoint |
-| PM Analyst and Admin queues in the UI | Lowest priority per lead | The API already returns both; the screen renders any role's items |
 | Health trends (sparklines, 8-week history) | Stretch | Snapshots are already stored on every change |
 | One-minute session-expiry warning | Time | 30-minute expiry, renewal while active and the 401 redirect are live |
 | `POST /users` idempotency | Time | Wrap the create in `beacon.idempotency.run` like other creates |

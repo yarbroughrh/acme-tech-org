@@ -29,10 +29,24 @@ source ~/.bashrc                       # always first: AWS_REGION, EVENT_ID, PAR
 ./bin/start-dev.sh                     # Postgres+Mongo+LocalStack+deploy Lambdas+proxy :3001+vite :3000 (foreground)
 curl http://localhost:3001/api/<service>          # local API via CORS proxy
 
+# Shared library: edit ONLY backend/_shared/beacon, then sync + commit the copies (ADR-002)
+./bin/sync-shared.sh                   # copy into backend/<svc>/beacon
+./bin/sync-shared.sh --check           # exit 1 on drift (also enforced by backend/tests/test_shared_sync.py)
+
 # Cloud: backend first, then frontend
-./bin/deploy-backend.sh aws            # terraform apply; ~1 min for code changes
+./bin/deploy.sh aws                    # sync + deploy-backend + deploy-frontend (preferred)
+./bin/deploy.sh aws --backend-only     # or --frontend-only
+./bin/deploy-backend.sh aws            # unchanged workshop script; works on its own (copies are committed)
 ./bin/deploy-frontend.sh aws           # vite build, s3 sync, CloudFront invalidation
-curl https://d1u6z5us0d06jy.cloudfront.net/api/<service>
+
+# Seed demo data (idempotent; IAM-only direct invoke; migrations run automatically on cold start)
+source ENVIRONMENT.config && aws lambda invoke --function-name coding-workshop-users-e2540683 \
+  --cli-binary-format raw-in-base64-out --cli-read-timeout 300 --payload '{"action":"seed"}' /tmp/seed.json && cat /tmp/seed.json
+# local: same with AWS_ENDPOINT_URL=http://localhost.localstack.cloud:4566 and test creds
+
+# Smoke test (every role, RBAC, search) against cloud or local
+./scripts/smoke.sh https://d1u6z5us0d06jy.cloudfront.net
+./scripts/smoke.sh http://localhost:3001
 
 # Direct (IAM-only) Lambda invoke, used for seeding; works from the VDI
 source ENVIRONMENT.config && aws lambda invoke --function-name coding-workshop-<service>-e2540683 \
@@ -43,10 +57,11 @@ aws logs tail /aws/lambda/coding-workshop-<service>-e2540683 --follow --format s
 AWS_ENDPOINT_URL=http://localhost.localstack.cloud:4566 aws logs tail /aws/lambda/coding-workshop-<service>-e2540683 --follow   # local
 tail -f /tmp/proxy-server.log /tmp/backend-deploy.log                                            # local proxy / deploy
 
-# Tests (to be set up in slice 1; see docs/TESTING.md)
-python3.13 -m venv .venv && .venv/bin/pip install -r backend/requirements-dev.txt
-.venv/bin/pytest backend --cov
-cd frontend && npm test
+# Tests
+python3.13 -m venv .venv && .venv/bin/pip install -r backend/requirements-dev.txt   # once
+cd backend && ../.venv/bin/pytest --cov=_shared/beacon --cov=auth --cov=users --cov=projects --cov-report=term-missing
+#   integration tests DROP and recreate local database `beacon_test` (never touches `postgres` or Aurora)
+cd frontend && npm test && npm run lint && npm run coverage
 ```
 
 ## Folder structure
@@ -54,10 +69,15 @@ cd frontend && npm test
 ```
 backend/<service>/          one Lambda per folder (function.py, handler `function.handler`, requirements.txt)
 backend/_examples/          reference examples, NOT deployed (underscore prefix)
-backend/_shared/            (planned) canonical shared library, NOT deployed itself; see DECISIONS ADR-002
+backend/_shared/beacon/     canonical shared library (db, http router, auth, rbac, validation, audit, migrations, seed)
+backend/<svc>/beacon/       COMMITTED synced copy; never edit directly (drift test fails)
+backend/<svc>/              function.py (routes) → <svc>_service.py (rules) → <svc>_repository.py (SQL)
+backend/tests/              pytest: unit + integration (real handlers, local Postgres)
+scripts/smoke.sh            curl smoke test for any base URL
 bin/                        workshop scripts (do not modify without asking the lead)
 infra/                      Terraform (do not modify without asking the lead)
-frontend/                   Vite + React 19 (MUI, router and test libs still to be added)
+frontend/src/               api/ (one client) · auth/ (context, guards, roles.js = roles/home/nav/capabilities) ·
+                            components/ · pages/ · utils/ · tests next to code (*.test.jsx, Vitest + RTL)
 docs/                       PLAN, DECISIONS, PROGRESS, TESTING, ...
 ```
 
@@ -113,5 +133,18 @@ docs/                       PLAN, DECISIONS, PROGRESS, TESTING, ...
     (exported VITE_* env vars override .env.local), but don't rely on `.env.local` for cloud builds.
 18. `deploy-*.sh aws` call `setup-participant.sh`, which refreshes the STS creds in `ENVIRONMENT.config`
     (gitignored, holds live credentials; never print or commit it).
-19. `backend/python-service/` is an **uncommitted Phase 0 smoke copy** of the example, deployed to AWS.
-    Delete it before the first feature deploy (the next apply removes its Lambda).
+19. ~~Phase 0 smoke copy `backend/python-service`~~: deleted; its Lambda was destroyed in the slice 1 deploy.
+20. **Add a service** = new `backend/<svc>/` with `requirements.txt` (psycopg + PyJWT), `function.py`, then
+    `./bin/sync-shared.sh`, add it to `SERVICES` in backend/tests/conftest.py and to `.coveragerc` omit.
+    Name service-local modules `<svc>_service.py` / `<svc>_repository.py`: unique names avoid import clashes in
+    tests, and `.gitignore` whitelists exactly those names (other files in service folders are ignored as pip output).
+21. Routes: register static paths (`/lookups`) BEFORE `/{id}`; params ending in `id` must be UUIDs (else 404).
+22. A handler that must persist state AND return an error (e.g. failed sign-in counter) returns
+    `error_result(...)` instead of raising, because raising rolls back the request transaction.
+23. **Applied migrations are immutable**: add `NNNN_*.sql`; never edit 0001–0003 (the cloud DB has them).
+24. Seed is versioned (`seed_config.SEED_VERSION`); changing seed code does NOT reseed an existing DB.
+25. Cold seed on Aurora takes ~40 s (resume + 5 PBKDF2 hashes at 128 MB): use `--cli-read-timeout 300`.
+26. MUI 9 icons: only `*Outlined` names exist (no `*Outline`).
+27. eslint-plugin-react-hooks v7 forbids synchronous setState in effects; use `utils/useApiQuery.js`.
+28. Frontend `roles.js` CAPABILITIES mirrors `beacon/rbac.py` for hiding UI only; keep them in step
+    (e.g. `spend.record` = PMO only, CONFIRMED).

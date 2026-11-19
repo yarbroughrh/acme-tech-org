@@ -1,6 +1,6 @@
 # Beacon — Delivery Plan
 
-_Design checkpoint, 2026-11-19. Code freeze 16:00. Status key: ✅ CONFIRMED by Head of PMO · ⚠️ ASSUMPTION (to confirm today)._
+_Design checkpoint, 2026-11-19 (updated after Slice 1 with four stakeholder confirmations). Code freeze 16:00. Status key: ✅ CONFIRMED by Head of PMO · ⚠️ ASSUMPTION (to confirm today)._
 
 ## 1. Problem and success
 
@@ -21,13 +21,13 @@ enough to act on.
 | Capability | Admin | Portfolio Mgr | Project Mgr | Team member ⚠️ | Executive |
 |---|---|---|---|---|---|
 | Users, roles, password reset, unlock | ✅ | – | – | – | – |
-| View portfolio / projects / dashboards | read-only ⚠️ | all | all; edit own ⚠️ | own tasks only ⚠️ | all, read-only |
+| View portfolio / projects / dashboards | read-only ⚠️ | all | all ⚠️ (open: all vs own); edit own | own tasks only ⚠️ (role open) | all, read-only |
 | Create project, baseline dates & budget, assign PM | – | ✅ | – (⚠️ can't move baselines) | – | – |
 | Archive / cancel project | – | ✅ | – | – | – |
 | Edit project; CRUD milestones & tasks | – | ✅ | own | – | – |
 | Allocate people | – | ✅ | own | – | – |
-| Record spend ⚠️ | – | ✅ | own | – | – |
-| Weekly status update | – | – | own | – | – |
+| Record actual spend ✅ | – | ✅ | – (403) | – | – |
+| Weekly status update (at least weekly ✅) | – | – | own | – | – |
 | Update status of own assigned tasks ⚠️ | – | – | ✅ | ✅ | – |
 | Override health | – | – | – | – | – |
 | Edit health thresholds ⚠️ | – | ✅ | – | – | – |
@@ -50,13 +50,14 @@ the threshold-editing *screen* (rules are editable in the DB/API; the screen is 
 **Cut list (drop in this order if behind):**
 1. Stretch goals (all)
 2. Under-allocation chart on the dashboard (keep the over-allocation list)
-3. Budget burn chart (keep the per-project numbers)
+3. Budget burn chart (keep the per-project numbers); it sits below the queue and department view on the executive home
 4. Mobile card variants beyond the portfolio list (tables scroll horizontally instead)
 5. Health snapshot history UI (keep writing snapshots)
 6. Token auto-renew warning dialog (keep hard 30-min expiry → redirect to sign-in)
 7. Audit log *viewer* (keep writing audit rows; API only)
 
-Never cut: calculated health with reasons, RBAC on every endpoint, password/lockout rules, tests, cloud deploy.
+Never cut: calculated health with reasons, RBAC on every endpoint, password/lockout rules, tests, cloud deploy,
+and (CONFIRMED) the executive home's "Needs attention" queue with Red projects at the top and health by department.
 
 ## 4. Architecture
 
@@ -84,10 +85,10 @@ invoke (not exposed over HTTP) and is idempotent.
 |---|---|
 | **auth** | `POST /api/auth/login` · `POST /api/auth/refresh` · `POST /api/auth/change-password` · `GET /api/auth/me` |
 | **users** (Admin) | `GET/POST /api/users` · `GET/PUT /api/users/{id}` · `POST /api/users/{id}/reset-password` · `POST /api/users/{id}/unlock` |
-| **projects** | `GET/POST /api/projects` · `GET/PUT /api/projects/{id}` · `POST /api/projects/{id}/archive` · `/cancel` · `GET /api/projects/{id}/health` (current + history) · `GET /api/projects/{id}/audit` |
+| **projects** | `GET /api/projects/lookups` (departments, PMs) · `GET/POST /api/projects` · `GET/PUT /api/projects/{id}` · `POST /api/projects/{id}/archive` · `/cancel` · `GET /api/projects/{id}/health` (current + history) · `GET /api/projects/{id}/audit` |
 | projects (nested) | `GET/POST /api/projects/{id}/milestones`, `PUT/DELETE …/milestones/{mid}` · same for `tasks`, `allocations`, `spend` · `GET/POST …/status-updates` · `PATCH …/tasks/{tid}/status` (assignee) |
 | **people** | `GET /api/people` (search, over/under-allocated filters) · `GET /api/people/{id}` (allocations) · `GET /api/people/me/tasks` |
-| **portfolio** | `GET /api/portfolio/summary` (dashboard) · `GET /api/portfolio/attention` · `GET /api/portfolio/audit` · `GET/PUT /api/portfolio/health-rules` · `GET /api/portfolio/lookups` (departments, PMs) |
+| **portfolio** | `GET /api/portfolio/summary` (dashboard) · `GET /api/portfolio/attention` · `GET /api/portfolio/audit` · `GET/PUT /api/portfolio/health-rules` |
 
 All list endpoints: `?q=&page=&page_size=&sort=` + filters. All creates accept `Idempotency-Key`. All updates carry `version`.
 
@@ -131,10 +132,10 @@ DB enforces FKs, NOT NULL, CHECKs (enums, budget > 0, end > start, 0.5 ≤ hours
 | **Schedule** (elapsed% = days since planned start ÷ planned duration; progress% = avg milestone completion) | progress lags elapsed by **> 10 pts**, or actual start **> 7 days** after planned | lag **> 25 pts**, or planned end passed and not complete | dimension ✅, thresholds ⚠️ |
 | **Budget** (planned-to-date = budget × elapsed%) | actual > planned-to-date by **> 10%**, or %budget spent > progress% by **> 15 pts** | actual > planned-to-date by **> 20%**, or > total budget | dimension ✅, thresholds ⚠️ |
 | **Milestones** (At risk = due ≤ **7 days** and < **75%**; Late = past due, not complete) | any at risk, or **1** late | **≥ 2** late, or any > **14 days** late | dimension ✅, thresholds ⚠️ |
-| **Overall** | worst of the three | | ⚠️ |
+| **Overall** | worst of the three | | ✅ |
 | No override by anyone | | | ✅ |
 | Flag "Status mismatch": PM's reported status better than calculated | | | ⚠️ |
-| Flag "Update overdue": no status update in **7 days** (colour unchanged) | | | ⚠️ |
+| Flag "Update overdue": PMs update at least weekly; none in **7 days** raises the flag (colour unchanged) | | | ✅ |
 | Snapshot stored whenever inputs change | | | ✅ |
 
 The engine is a pure function `evaluate_health(project, milestones, tasks, spend_entries, status_updates, rules, today)`
@@ -146,11 +147,11 @@ re-evaluated when `health_as_of < today` (time alone moves elapsed%).
 | Slice | Target | Content |
 |---|---|---|
 | 0 Foundations | 11:00 | Shared library + sync, migrations runner, error/logging/router, test harness (pytest + Vitest), MUI shell, API client |
-| **1** | **12:00 deployed** | Schema + seed (120 projects, 150 people, demo accounts) · sign-in, password policy, lockout, 30-min JWT + renew · RBAC map · Admin user list · read-only portfolio list from Aurora · smoke script green on AWS |
+| **1** ✔ | **12:00 deployed** (done) | Schema + seed (120 projects, 150 people, demo accounts) · sign-in, password policy, lockout, 30-min JWT + renew · RBAC map · Admin user list · read-only portfolio list from Aurora · smoke script green on AWS |
 | 2 | 13:00 | PMO create/assign/archive/cancel (cascade) · PM milestones, tasks, weekly updates · audit log · idempotency · 409 conflicts |
 | 3 | 13:45 | Health engine + table-driven tests · reasons UI badge · mismatch/overdue flags · snapshots |
-| 4 | 14:30 | Allocations (40 h amber / 60 h reject, lifecycle rules) · spend entries · people view |
-| 5 | 15:00 | Portfolio search/filter/sort/paginate · dashboard · attention queue · role-aware home pages |
+| 4 | 14:30 | Allocations (40 h amber / 60 h reject, lifecycle rules) · spend entries (**PMO only** ✅; PM gets 403, no spend editing in PM UI) · people view |
+| 5 | 15:00 | Executive home **opens with the "Needs attention" queue, Red projects at the top** ✅, then health by department, then the other charts · PMO attention queue · role-aware home pages (portfolio search/filters already done in Slice 1) |
 | Freeze | 15:00–16:00 | Hardening, coverage, 375 px check, final deploy, smoke test on AWS, docs, push |
 
 ## 8. Top risks
@@ -167,23 +168,14 @@ re-evaluated when `health_as_of < today` (time alone moves elapsed%).
 | Scope vs 5 hours | Slice 1 deployed by 12:00; strict cut list |
 | AI stretch: Lambda has no route to Bedrock | Template fallback only unless infra adds a VPC endpoint (ask) |
 
-## 9. Open questions for the stakeholder (all ⚠️ above)
+## 9. Open questions for the stakeholder
 
-1. Admin read access to project data: read-only, or none?
-2. PM view scope: see all projects (edit own), or only their own?
-3. Team member role: is "assigned by the PM" = an app user who sees only their tasks? Can they update task status?
-4. PMs can't change baseline dates or approved budget. Confirm. Who re-baselines (PMO only)?
-5. Who records actual spend: PM and PMO, or finance via PMO only?
-6. Health only for Active projects. What do On hold projects show?
-7. Every threshold value in §6 (10/25 pts, 7 days late start, 10%/20% spend, 15 pts ahead-of-delivery, 7 days / 75% at-risk, 14 days late).
-8. Overall = worst dimension, or a weighted balance?
-9. "Late start" needs an *actual start date*. Who records it? If none is recorded and planned start + 7 days has passed, is that Amber?
-10. Mismatch flagged only when the PM reports *better* than calculated, or any difference?
-11. Overdue update after 7 days. Weekly cadence for every project, including On hold?
-12. 60 h/week: hard reject? 40 h standard for everyone (part-timers)?
-13. Tasks assignable only to people allocated to the project?
-14. Session: 30-min sliding with renewal while active, or a hard 30 min? Lockout 5 attempts / 15 min?
-15. Temporary password on reset, forced change at next sign-in?
-16. Concurrent edit: 409 + "changed by X, reload". Is that acceptable UX?
-17. What should the steering committee see first on the dashboard?
-18. Auto-refresh every 60 s, no offline mode. OK?
+Confirmed on 2026-11-19: overall = worst dimension · weekly updates (7-day overdue flag) · spend recorded by the PMO
+only · executive home leads with the attention queue and Red projects.
+
+**Top 5 now** (full ranked list of 17 in docs/DECISIONS.md):
+1. The exact health thresholds (every value in §6)
+2. 60 h/week: hard reject, or allowed with a warning?
+3. Can PMs see all projects, or only their own?
+4. Team member role: do assignees sign in and update their own task status?
+5. Who can re-baseline dates and approved budget (PMO only)?

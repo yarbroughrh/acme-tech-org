@@ -181,7 +181,8 @@ class _Builder:
         progress_days = elapsed_days - lag * duration if lifecycle != "CLOSED" else duration
         team = self.allocate(project_id, lifecycle, start, end, people, priya, member_person, profile)
         self.milestones(project_id, lifecycle, profile, start, end, duration, progress_days, team)
-        self.spend(project_id, lifecycle, start, end, budget, elapsed * spend_factor if lifecycle != "CLOSED" else 0.97)
+        self.spend(project_id, lifecycle, start, end, budget,
+                   elapsed * spend_factor if lifecycle != "CLOSED" else 0.97, pmo_user)
         self.status_updates(project_id, lifecycle, profile, actual_start, pm_user)
 
     def milestones(self, project_id: str, lifecycle: str, profile: str, start: date, end: date,
@@ -254,7 +255,8 @@ class _Builder:
         return team
 
     def spend(self, project_id: str, lifecycle: str, start: date, end: date, budget: Decimal,
-              fraction_of_budget: float) -> None:
+              fraction_of_budget: float, recorded_by: str) -> None:
+        """Monthly spend entries, recorded by the Portfolio Manager (only PMO records spend, CONFIRMED)."""
         if lifecycle == "PROPOSED" or fraction_of_budget <= 0:
             return
         rnd, today = self.rnd, self.today
@@ -269,7 +271,7 @@ class _Builder:
             if amount <= 0:
                 continue
             category = rnd.choices(["LABOUR", "VENDOR", "SOFTWARE_HARDWARE", "OTHER"], [6, 3, 2, 1])[0]
-            self.rows["spend_entries"].append((_id(), project_id, spent_on, amount, category, None))
+            self.rows["spend_entries"].append((_id(), project_id, spent_on, amount, category, None, recorded_by))
 
     def status_updates(self, project_id: str, lifecycle: str, profile: str, actual_start: date | None,
                        pm_user: str) -> None:
@@ -306,8 +308,8 @@ _INSERTS = {
               "VALUES (%s, %s, %s, %s, %s, %s, %s)"),
     "allocations": ("INSERT INTO allocations (id, person_id, project_id, hours_per_week, start_date, end_date) "
                     "VALUES (%s, %s, %s, %s, %s, %s)"),
-    "spend_entries": ("INSERT INTO spend_entries (id, project_id, spent_on, amount, category, note) "
-                      "VALUES (%s, %s, %s, %s, %s, %s)"),
+    "spend_entries": ("INSERT INTO spend_entries (id, project_id, spent_on, amount, category, note, created_by) "
+                      "VALUES (%s, %s, %s, %s, %s, %s, %s)"),
     "status_updates": ("INSERT INTO status_updates (id, project_id, author_user_id, reported_status, summary, created_at) "
                        "VALUES (%s, %s, %s, %s, %s, %s)"),
 }

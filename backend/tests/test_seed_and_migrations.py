@@ -72,3 +72,16 @@ def test_seed_data_respects_date_rules(database):
                                  "WHERE s.spent_on > current_date OR s.spent_on < p.planned_start "
                                  "OR s.spent_on > p.planned_end").fetchone()["n"]
     assert bad_milestones == 0 and bad_spend == 0
+
+
+def test_confirmed_rules_are_flagged(database):
+    rows = {r["key"]: r["confirmed"] for r in database.execute("SELECT key, confirmed FROM health_rules").fetchall()}
+    assert rows["status_update_overdue_days"] is True  # weekly updates CONFIRMED
+    # still ASSUMPTIONs: exact thresholds and the 60-hour limit
+    assert rows["schedule_amber_lag_pts"] is False and rows["allocation_max_hours"] is False
+
+
+def test_seeded_spend_is_recorded_by_the_portfolio_manager(database):
+    roles = database.execute("SELECT DISTINCT u.role FROM spend_entries s JOIN users u ON u.id = s.created_by").fetchall()
+    assert [r["role"] for r in roles] == ["PMO"]
+    assert database.execute("SELECT count(*) AS n FROM spend_entries WHERE created_by IS NULL").fetchone()["n"] == 0

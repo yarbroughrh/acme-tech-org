@@ -75,6 +75,12 @@ def test_rbac_has_no_health_override_action():
     ("MEMBER", "project.read", None),      # ASSUMPTION R3
     ("MEMBER", "task.update_own_status", rbac.OWN),
     ("PMO", "status_update.submit", None),
+    # Only the Portfolio Manager records actual spend (CONFIRMED)
+    ("PMO", "spend.record", rbac.ALL),
+    ("PM", "spend.record", None),
+    ("ADMIN", "spend.record", None),
+    ("EXEC", "spend.record", None),
+    ("MEMBER", "spend.record", None),
 ])
 def test_rbac_matrix(role, action, expected):
     assert rbac.scope_for(_principal(role), action) == expected

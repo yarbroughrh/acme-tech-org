@@ -29,7 +29,7 @@ PERMISSIONS: dict[str, dict[str, str]] = {
     "project.edit": {PMO: ALL, PM: OWN},
     "plan.edit": {PMO: ALL, PM: OWN},  # milestones and tasks
     "allocation.edit": {PMO: ALL, PM: OWN},
-    "spend.record": {PMO: ALL, PM: OWN},  # ASSUMPTION R6
+    "spend.record": {PMO: ALL},  # Only the Portfolio Manager records actual spend (CONFIRMED R6)
     "status_update.submit": {PM: OWN},
     # Task status by assignee (ASSUMPTION R4)
     "task.update_own_status": {PM: OWN, MEMBER: OWN},

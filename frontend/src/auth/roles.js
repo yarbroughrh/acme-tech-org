@@ -45,3 +45,31 @@ export function navItemsFor(role) {
 export function homeFor(role) {
   return ROLE_HOME[role] || '/portfolio'
 }
+
+/**
+ * UI capability map: mirrors backend/_shared/beacon/rbac.py so screens can hide or disable
+ * actions a role cannot perform. COSMETIC ONLY: the backend enforces every permission.
+ * Value = roles allowed; ownership ("own projects only") is still checked by the backend.
+ */
+export const CAPABILITIES = {
+  'users.manage': ['ADMIN'],
+  'project.create': ['PMO'],
+  'project.set_baseline': ['PMO'],
+  'project.archive': ['PMO'],
+  'project.edit': ['PMO', 'PM'],
+  'plan.edit': ['PMO', 'PM'],
+  'allocation.edit': ['PMO', 'PM'],
+  'spend.record': ['PMO'], // Only the Portfolio Manager records actual spend (CONFIRMED)
+  'status_update.submit': ['PM'],
+  'health_rules.edit': ['PMO'],
+}
+
+/**
+ * Whether a role may perform an action (UI hint only).
+ * @param {string} role
+ * @param {string} action key of CAPABILITIES
+ * @returns {boolean}
+ */
+export function can(role, action) {
+  return (CAPABILITIES[action] || []).includes(role)
+}

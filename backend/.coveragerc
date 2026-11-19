@@ -8,3 +8,5 @@ omit =
     projects/beacon/*
     change-requests/beacon/*
     */beacon/*/beacon/*
+    me/beacon/*
+    people/beacon/*

@@ -27,7 +27,8 @@ def test_seed_rerun_is_skipped_and_never_duplicates(database):
 
 
 def test_seed_scale(database):
-    counts = {t: database.execute(f"SELECT count(*) AS n FROM {t}").fetchone()["n"]  # nosec B608 - fixed table names
+    seeded = "created_at <= (SELECT max(applied_at) FROM seed_runs)"  # other tests add their own rows
+    counts = {t: database.execute(f"SELECT count(*) AS n FROM {t} WHERE {seeded}").fetchone()["n"]  # nosec B608
               for t in ("people", "departments", "milestones", "tasks", "allocations", "spend_entries", "status_updates")}
     assert counts["people"] == 151 and counts["departments"] == 8  # 150 + Marcus Webb (seed v3)
     assert min(counts.values()) > 0
@@ -39,6 +40,7 @@ def test_story_over_allocated_person(database):
     assert float(row["h"]) == 58
     max_other = database.execute("SELECT max(t) AS m FROM (SELECT sum(hours_per_week) t FROM allocations a "
                                  "JOIN people p ON p.id = a.person_id WHERE p.full_name NOT IN ('Priya Raman', 'Marcus Webb') "
+                                 "AND p.created_at <= (SELECT max(applied_at) FROM seed_runs) "
                                  "GROUP BY person_id) s").fetchone()["m"]
     assert float(max_other) <= 40
     under = database.execute("SELECT count(*) AS n FROM (SELECT person_id, sum(hours_per_week) t FROM allocations "

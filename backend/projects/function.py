@@ -12,11 +12,13 @@ registered before ``/{id}``. Creates honour ``Idempotency-Key``; updates require
     GET  /{id}/audit                            audit trail
     GET|POST /{id}/milestones   PUT|DELETE /{id}/milestones/{milestone_id}
     GET|POST /{id}/tasks        PUT|DELETE /{id}/tasks/{task_id}
+    GET|POST /{id}/allocations  PUT|DELETE /{id}/allocations/{allocation_id}   (warnings, no hard block)
     GET|POST /{id}/status-updates
     GET|POST /{id}/analysts     DELETE /{id}/analysts/{user_id}
     POST /{id}/change-requests                  PM Analyst proposal
 """
 
+import allocations_service
 import collaboration_service as collab
 import plan_service
 import projects_service
@@ -127,6 +129,30 @@ def update_task(req: Request, conn) -> tuple:
 def delete_task(req: Request, conn) -> tuple:
     """Soft-delete a task."""
     return plan_service.delete_task(conn, req.user, req.params["id"], req.params["task_id"])
+
+
+@router.route("GET", "/{id}/allocations")
+def list_allocations(req: Request, conn) -> tuple:
+    """Allocations with load."""
+    return allocations_service.list_allocations(conn, req.user, req.params["id"])
+
+
+@router.route("POST", "/{id}/allocations")
+def create_allocation(req: Request, conn) -> tuple:
+    """Allocate a person (warnings, no hard block)."""
+    return idempotency.run(conn, req, lambda: allocations_service.create_allocation(conn, req.user, req.params["id"], req.json()))
+
+
+@router.route("PUT", "/{id}/allocations/{allocation_id}")
+def update_allocation(req: Request, conn) -> tuple:
+    """Change an allocation."""
+    return allocations_service.update_allocation(conn, req.user, req.params["id"], req.params["allocation_id"], req.json())
+
+
+@router.route("DELETE", "/{id}/allocations/{allocation_id}")
+def remove_allocation(req: Request, conn) -> tuple:
+    """Archive an allocation."""
+    return allocations_service.remove_allocation(conn, req.user, req.params["id"], req.params["allocation_id"])
 
 
 @router.route("GET", "/{id}/status-updates")

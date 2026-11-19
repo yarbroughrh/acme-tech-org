@@ -15,10 +15,11 @@ Read `docs/PROGRESS.md` first (what's done / next), then `docs/PLAN.md` and `doc
 | API base (cloud) | `https://d1u6z5us0d06jy.cloudfront.net/api/{service}` |
 | Aurora | `coding-workshop-rds-e2540683`, PostgreSQL **17.7**, db `codingworkshop`, Serverless v2 min 0 ACU, **auto-pause after 300 s** |
 | Local Postgres | **18.7** on `localhost:5432`, user `postgres` / `postgres123`, db `postgres` (Lambdas reach it at `172.17.0.1`) |
-| Lambda | `python3.13`, x86_64, **128 MB (fixed in Terraform)**, timeout 300 s; but CloudFront origin timeout is ~30 s |
+| Lambda | `python3.13`, x86_64, 128 MB (auth: 1769 MB via `lambda_memory_overrides`), timeout 300 s; CloudFront origin timeout ~30 s |
+| Services | `auth`, `users`, `projects`, `change-requests`, `people`, `portfolio`, `me` (folder = first URL segment) |
 | Host Python | `python3` = 3.13 ✔, but bare `pip` = **Python 3.14** ✘ |
 | Node / npm | 22 / 10 |
-| Git remotes | `origin` = github.com/yarbroughrh/acme-tech-org, `upstream` = citi/coding-workshop-participant. No GitHub creds on VDI; the user pushes via `! git push`. |
+| Git remotes | `origin` = github.com/yarbroughrh/acme-tech-org, `upstream` = citi/coding-workshop-participant. Claude's shell has NO GitHub credentials: the lead pushes from their own terminal (`!` commands can't prompt). |
 
 ## Commands
 
@@ -148,3 +149,13 @@ docs/                       PLAN, DECISIONS, PROGRESS, TESTING, ...
 27. eslint-plugin-react-hooks v7 forbids synchronous setState in effects; use `utils/useApiQuery.js`.
 28. Frontend `roles.js` CAPABILITIES mirrors `beacon/rbac.py` for hiding UI only; keep them in step
     (e.g. `spend.record` = PMO only, CONFIRMED).
+29. **Integration tests share one database.** Never assert exact global counts; scope to seeded rows with
+    `created_at <= (SELECT max(applied_at) FROM seed_runs)`, or archive post-seed data in a module fixture
+    (see tests/test_work_queue_api.py). Several order-dependent failures came from this.
+30. **Deploying one change in isolation:** `git worktree add -b tmp <dir> <last-deployed-commit>`, cherry-pick the
+    change, copy `ENVIRONMENT.config`, symlink `frontend/node_modules`, run the workshop scripts from the
+    worktree, then remove the worktree and branch (ADR-016). Read the Terraform plan: packaging artefacts
+    (`null_resource.archive`, `aws_s3_object.lambda_package`) show as replaced; that's normal.
+31. Any `backend/<folder>` with a `requirements.txt` IS deployed. Park unfinished services outside `backend/`.
+32. pytest.ini has `-q`; use `-vv` to see test names.
+33. Business rules: CONFIRMED vs LEAD DECISION vs ASSUMPTION live in docs/DECISIONS.md Part B; cuts in Part C.

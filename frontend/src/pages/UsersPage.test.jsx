@@ -52,7 +52,7 @@ describe('UsersPage', () => {
     await user.type(within(dialog).getByLabelText(/Full name/), 'New Person')
     await user.type(within(dialog).getByLabelText(/Email/), 'new@acme.example')
     await user.click(within(dialog).getByRole('button', { name: 'Create user' }))
-    expect(usersApi.createUser).toHaveBeenCalledWith({ display_name: 'New Person', email: 'new@acme.example', role: 'MEMBER' })
+    expect(usersApi.createUser).toHaveBeenCalledWith({ display_name: 'New Person', email: 'new@acme.example', role: 'ANALYST' })
     expect(await screen.findByDisplayValue('Tmp-Pass-1234!')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Done' }))
   })

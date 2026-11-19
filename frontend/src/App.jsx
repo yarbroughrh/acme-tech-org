@@ -3,7 +3,7 @@ import { CssBaseline, ThemeProvider } from '@mui/material'
 import theme from './theme'
 import { AuthProvider, useAuth } from './auth/AuthContext'
 import RequireAuth from './auth/RequireAuth'
-import { homeFor } from './auth/roles'
+import { PORTFOLIO_ROLES, homeFor } from './auth/roles'
 import AppShell from './components/AppShell'
 import { NotifyProvider } from './components/NotifyProvider'
 import LoginPage from './pages/LoginPage'
@@ -11,7 +11,9 @@ import ChangePasswordPage from './pages/ChangePasswordPage'
 import PortfolioPage from './pages/PortfolioPage'
 import ProjectDetailPage from './pages/ProjectDetailPage'
 import UsersPage from './pages/UsersPage'
-import MyTasksPage from './pages/MyTasksPage'
+import PmHomePage from './pages/PmHomePage'
+import ApprovalsPage from './pages/ApprovalsPage'
+import MyProposalsPage from './pages/MyProposalsPage'
 import NotFoundPage from './pages/NotFoundPage'
 
 /** Send the user to their role's home page. */
@@ -35,10 +37,12 @@ export function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/change-password" element={<RequireAuth><ChangePasswordPage /></RequireAuth>} />
       <Route path="/" element={<RequireAuth><HomeRedirect /></RequireAuth>} />
-      <Route path="/portfolio" element={shell(<PortfolioPage />, ['ADMIN', 'PMO', 'PM', 'EXEC'])} />
-      <Route path="/portfolio/:id" element={shell(<ProjectDetailPage />, ['ADMIN', 'PMO', 'PM', 'EXEC'])} />
+      <Route path="/portfolio" element={shell(<PortfolioPage />, PORTFOLIO_ROLES)} />
+      <Route path="/portfolio/:id" element={shell(<ProjectDetailPage />, PORTFOLIO_ROLES)} />
+      <Route path="/home" element={shell(<PmHomePage />, ['PM'])} />
+      <Route path="/approvals" element={shell(<ApprovalsPage />, ['PM'])} />
+      <Route path="/my-proposals" element={shell(<MyProposalsPage />, ['ANALYST'])} />
       <Route path="/users" element={shell(<UsersPage />, ['ADMIN'])} />
-      <Route path="/my-tasks" element={shell(<MyTasksPage />, ['MEMBER'])} />
       <Route path="*" element={shell(<NotFoundPage />)} />
     </Routes>
   )

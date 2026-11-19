@@ -28,3 +28,19 @@ describe('format helpers', () => {
     expect(validateLogin({ email: 'a@b.co', password: 'p' })).toEqual({})
   })
 })
+
+describe('slice 2 formatters', () => {
+  it('formats diff values by field and entity type', async () => {
+    const { formatFieldValue, formatPct } = await import('./format')
+    expect(formatFieldValue('status', 'DONE', 'TASK')).toBe('Done')
+    expect(formatFieldValue('status', 'COMPLETE', 'MILESTONE')).toBe('Complete')
+    expect(formatFieldValue('status', 'IN_PROGRESS')).toBe('In progress')
+    expect(formatFieldValue('percent_complete', 40)).toBe('40%')
+    expect(formatFieldValue('due_date', '2026-11-19')).toBe('19 Nov 2026')
+    expect(formatFieldValue('notes', null)).toBe('—')
+    expect(formatFieldValue('extra', { a: 1 })).toBe('{"a":1}')
+    expect(formatFieldValue('name', 'X')).toBe('X')
+    expect(formatPct(55.6)).toBe('56%')
+    expect(formatPct(null)).toBe('—')
+  })
+})

@@ -76,7 +76,7 @@ TempPasswordDialog.propTypes = { info: PropTypes.shape({ name: PropTypes.string,
 
 /** Create-user dialog with inline validation. */
 function CreateUserDialog({ open, onClose, onCreated }) {
-  const [values, setValues] = useState({ display_name: '', email: '', role: 'MEMBER' })
+  const [values, setValues] = useState({ display_name: '', email: '', role: 'ANALYST' })
   const [submitted, setSubmitted] = useState(false)
   const [saving, setSaving] = useState(false)
   const [serverError, setServerError] = useState('')
@@ -85,7 +85,7 @@ function CreateUserDialog({ open, onClose, onCreated }) {
   if (!values.email.trim()) errors.email = 'Enter an email address.'
   else if (!isEmail(values.email)) errors.email = 'Enter a valid email address.'
 
-  const reset = () => { setValues({ display_name: '', email: '', role: 'MEMBER' }); setSubmitted(false); setServerError('') }
+  const reset = () => { setValues({ display_name: '', email: '', role: 'ANALYST' }); setSubmitted(false); setServerError('') }
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -138,7 +138,7 @@ CreateUserDialog.propTypes = { open: PropTypes.bool.isRequired, onClose: PropTyp
 
 /** Edit role / active flag, with optimistic-concurrency handling. */
 function EditUserDialog({ user, onClose, onSaved, onConflict }) {
-  const [values, setValues] = useState(() => ({ role: user?.role || 'MEMBER', is_active: user?.is_active ?? true }))
+  const [values, setValues] = useState(() => ({ role: user?.role || 'ANALYST', is_active: user?.is_active ?? true }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 

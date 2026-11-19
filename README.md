@@ -1,113 +1,78 @@
-# Coding Workshop
+# Beacon — Portfolio Health
 
-The goal of this coding workshop is to enable and assess the hands-on skills
-of participants through development of a practical technical solution that
-solves a theoretical business problem.
+Beacon gives ACME Enterprise Technology's Portfolio Management Office and leadership **one trusted, current
+view of project health**, people allocation, deliverables and budget. Health is **calculated from data by
+transparent, configurable rules** (never chosen by the project manager), and every status explains itself,
+for example: *"Amber. Budget: spend is 14% ahead of plan. Milestones: 'UAT sign-off' is due in 3 days and 40% complete."*
 
-## Getting Started
+**Live:** https://d1u6z5us0d06jy.cloudfront.net
 
-Navigate to [Coding Workshop - Main Guide](./docs/README.md) to get started.
+## Demo accounts
 
-## Coding Workshop Example
+Demo data only. The passwords satisfy the policy (12+ characters, upper, lower, digit, symbol).
 
-Coding workshop organizer(s) will provide instructions to follow by email. Here
-below is a real example of requirements and expectations for participant(s):
+| Role | Email | Password | Lands on |
+|---|---|---|---|
+| Admin | admin@acme.example | `Beacon!Admin2026` | User management |
+| Portfolio Manager (PMO) | pmo@acme.example | `Beacon!Pmo2026` | Portfolio / attention queue |
+| Project Manager | pm@acme.example | `Beacon!Pm2026x` | My work: approvals waiting, my projects |
+| PM Analyst | analyst1@acme.example | `Beacon!Analyst2026` | My proposals |
+| PM Analyst | analyst2@acme.example | `Beacon!Analyst2027` | My proposals |
+| Executive | exec@acme.example | `Beacon!Exec2026` | Portfolio (dashboard in a later slice) |
 
-### Requirements: Business Problem
+Five failed sign-ins lock an account for 15 minutes; the Admin can unlock it.
 
-Our company ACME Inc. is going through a massive organizational transformation
-to become a more data-driven organization. Information about teams structure
-and performance is currently scattered across multiple systems, making it
-difficult to get a comprehensive view of team dynamics and achievements.
+**Demo story in the data:** *Customer Portal Rebuild* (the PM reports Green, but the data says Red, so it shows
+Status mismatch), *Data Lake Modernisation* (spending ahead of delivery), *Payments Gateway Upgrade* (two late
+milestones), *Branch Network Refresh* (no status update for 12 days), and Priya Raman (allocated 58 h/week).
+Jordan Lee (PM) has PM Analyst proposals waiting for approval.
 
-We are struggling to answer simple questions like:
+## Architecture
 
-* Who are the members of each team?
-* Where are the teams located?
-* What are the key achievements of each team on a monthly basis?
-* How many teams have team leader not co-located with team members?
-* How many teams have team leader as a non-direct staff?
-* How many teams have non-direct staff to employees ratio above 20%?
-* How many teams are reporting to an organization leader?
+```mermaid
+graph LR
+  B[Browser: React 19 + MUI, HashRouter] -->|HTTPS| CF[CloudFront]
+  CF -->|static| S3[(S3 bucket)]
+  CF -->|/api/auth*| A[λ auth]
+  CF -->|/api/users*| U[λ users]
+  CF -->|/api/projects*| P[λ projects]
+  CF -->|/api/change-requests*| C[λ change-requests]
+  A & U & P & C -->|psycopg3, TLS| DB[(Aurora PostgreSQL 17)]
+  OPS[Operator] -.->|aws lambda invoke: seed| U
+```
 
-### Requirements: Technical Solution
+- **Backend:** Python 3.13 Lambdas, one per domain. Each is layered handler → service → repository, on a shared
+  library (`backend/_shared/beacon`) covering the DB connection, router, auth, RBAC, validation, audit,
+  idempotency, the health engine, migrations and the seed. The library is synced into each service and
+  committed (see docs/DECISIONS.md ADR-002).
+- **Security:** PBKDF2-SHA256 (600k iterations) passwords, 30-minute JWT sessions renewed while active,
+  lockout, a role × action permission map enforced on every request, and ownership checks in services.
+- **Data:** versioned migrations run automatically on Lambda cold start; an idempotent seed runs by direct IAM invoke.
 
-As part of this transformation, we are looking to build a centralized team
-management tool that will allow us to track team members, team locations,
-monthly team achievements, as well as individual-level and team-level metadata.
-Initial focus is to provide a self-service capability without any integrations
-with other tools such as Employee Directory, Project Tracking, or Performance
-Management.
+## Run, test, deploy
 
-The technical solution involves developing a stand-alone web application using
-modern technologies. The application will have the following features:
+```sh
+source ~/.bashrc
+./bin/start-dev.sh                              # local: Postgres, LocalStack, Lambdas, proxy :3001, UI :3000
 
-* User authentication and authorization
-* Role-based access control
-* CRUD operations for individuals, teams, achievements and metadata
-* Search and filter functionality
-* Responsive design for mobile and desktop usage
+python3.13 -m venv .venv && .venv/bin/pip install -r backend/requirements-dev.txt
+(cd backend && ../.venv/bin/pytest --cov=_shared/beacon --cov=auth --cov=users --cov=projects --cov=change-requests)
+(cd frontend && npm test && npm run lint)
 
-### Requirements: Technology Stack
+./bin/deploy.sh aws                             # sync shared lib, deploy backend, then frontend
+source ENVIRONMENT.config && aws lambda invoke --function-name coding-workshop-users-e2540683 \
+  --cli-binary-format raw-in-base64-out --cli-read-timeout 300 --payload '{"action":"seed"}' /tmp/seed.json
+./scripts/smoke.sh https://d1u6z5us0d06jy.cloudfront.net    # signs in as every role, checks access control
+```
 
-The following technologies are required to build the application:
+## Documentation
 
-* Frontend: HTML, CSS, React.js with React Responsive and Material UI Components
-* Backend: Python
-* Database: PostgreSQL
-
-The following technologies are good to know, as they are used to manage and
-deploy code:
-
-* Version Control: Git, GitHub
-* Infrastructure: Terraform
-* Deployment Mode: Shell Scripts
-* Deployment Target: AWS Serverless (e.g. S3, CloudFront, Lambda, RDS)
-
-### Expectations: Value-Based Outcomes
-
-By the end of the workshop, participants will have developed a functional
-web application that meets the requirements outlined above. The application
-will be deployed to a cloud environment and accessible via a web browser.
-Participants will also gain hands-on experience with modern web development
-technologies and best practices.
-
-## Contributing
-
-See the [CONTRIBUTING](./CONTRIBUTING.md) resource for more details.
+- [docs/PLAN.md](docs/PLAN.md): delivery plan, scope, architecture, data model, health rules
+- [docs/DECISIONS.md](docs/DECISIONS.md): ADRs and every business rule (CONFIRMED / ASSUMPTION)
+- [docs/PROGRESS.md](docs/PROGRESS.md): done, next, risks
+- [CLAUDE.md](CLAUDE.md): commands and gotchas for engineers
+- Workshop guides: [docs/README.md](docs/README.md)
 
 ## License
 
-This library is licensed under the MIT-0 License.
-See the [LICENSE](./LICENSE) resource for more details.
-
-## Roadmap
-
-See the
-[open issues](https://github.com/citi/coding-workshop-participant/issues)
-for a list of proposed roadmap features (and known issues).
-
-## Security
-
-See the
-[Security Issue Notifications](./CONTRIBUTING.md#security-issue-notifications)
-resource for more details.
-
-## Authors
-
-The following people have contributed to this workshop:
-
-* Colin Heilman - [@heilmancs](https://github.com/heilmancs)
-* Eugene Istrati - [@eistrati](https://github.com/eistrati)
-* Isaiah Cornelius Smith - [@corneliusmith](https://github.com/corneliusmith)
-* Juan Arevalo - [@jparevalo27](https://github.com/jparevalo27)
-* Michael Annucci - [@michael-annucci](https://github.com/michael-annucci)
-
-## Feedback
-
-We'd love to hear your feedback! Please:
-
-* ⭐ Star the repository if you find it helpful
-* 🐛 Report issues on GitHub
-* 💡 Suggest improvements
-* 📝 Share your experience
+MIT-0. See [LICENSE](LICENSE).

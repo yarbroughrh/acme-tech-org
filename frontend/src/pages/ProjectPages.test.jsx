@@ -4,12 +4,20 @@ import userEvent from '@testing-library/user-event'
 import { renderApp, USERS } from '../test/renderWithProviders'
 import * as projectsApi from '../api/projects'
 import * as authApi from '../api/auth'
+import * as analystsApi from '../api/analysts'
+import * as changeRequestsApi from '../api/changeRequests'
 import { ApiError } from '../api/client'
 
-vi.mock('../api/projects', () => ({ listProjects: vi.fn(), getLookups: vi.fn(), getProject: vi.fn() }))
+vi.mock('../api/projects', () => ({ listProjects: vi.fn(), getLookups: vi.fn(), getProject: vi.fn(), createProject: vi.fn() }))
+vi.mock('../api/analysts', () => ({ listAnalysts: vi.fn(), assignAnalyst: vi.fn(), removeAnalyst: vi.fn() }))
+vi.mock('../api/changeRequests', () => ({ listChangeRequests: vi.fn(), approveChangeRequest: vi.fn(), rejectChangeRequest: vi.fn(), proposeChange: vi.fn() }))
 vi.mock('../api/auth', () => ({ login: vi.fn(), changePassword: vi.fn(), me: vi.fn() }))
 
 describe('ProjectDetailPage', () => {
+  beforeEach(() => {
+    projectsApi.getLookups.mockResolvedValue({ departments: [], project_managers: [], analysts: [] })
+    analystsApi.listAnalysts.mockResolvedValue({ items: [] })
+  })
   afterEach(() => vi.clearAllMocks())
 
   it('shows project details and the reasons for its health', async () => {
@@ -18,6 +26,8 @@ describe('ProjectDetailPage', () => {
         id: 'p1', name: 'Customer Portal Rebuild', department: { id: 'd', name: 'Digital Channels' }, pm: { id: 'u', display_name: 'Pat Manager' },
         sponsor: 'Sam Sponsor', planned_start: '2026-01-05', planned_end: '2026-12-18', actual_start: null, approved_budget: 2000000,
         lifecycle_status: 'ACTIVE', priority: 'HIGH', health_overall: 'RED', health_reasons: ['Milestones: 2 milestones are late.'],
+        health: { overall: 'RED', reasons: ['Milestones: 2 milestones are late.'], flags: [], dimensions: { milestones: { status: 'RED', summary: '2 late' } }, metrics: {} },
+        permissions: {},
         description: 'Rebuild the portal.', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-11-18T10:00:00Z', version: 2,
       },
     })
@@ -55,6 +65,7 @@ describe('ChangePasswordPage', () => {
 
   it('checks the policy inline and only submits a valid, confirmed password', async () => {
     authApi.changePassword.mockResolvedValue({ token: 't2', expires_at: '2099-01-01T00:00:00Z', user: { ...USERS.PM, must_change_password: false } })
+    changeRequestsApi.listChangeRequests.mockResolvedValue({ items: [], page: 1, page_size: 20, total: 0 })
     projectsApi.listProjects.mockResolvedValue({ items: [], page: 1, page_size: 20, total: 0 })
     projectsApi.getLookups.mockResolvedValue({ departments: [], project_managers: [] })
     const user = userEvent.setup()
@@ -77,7 +88,7 @@ describe('ChangePasswordPage', () => {
     await user.type(screen.getByLabelText(/Confirm new password/), 'Brand-New-Pass-2026')
     await user.click(screen.getByRole('button', { name: 'Change password' }))
     expect(authApi.changePassword).toHaveBeenCalledWith('Temp-Pass-123!', 'Brand-New-Pass-2026')
-    expect(await screen.findByRole('heading', { level: 1, name: 'Portfolio' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'My work' })).toBeInTheDocument()
   })
 
   it('shows server policy errors', async () => {

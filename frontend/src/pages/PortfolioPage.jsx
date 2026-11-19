@@ -1,15 +1,21 @@
 import { useCallback, useEffect, useState } from 'react'
 import PropTypes from 'prop-types'
-import { Link as RouterLink, useSearchParams } from 'react-router-dom'
+import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  Box, Card, CardActionArea, CardContent, FormControl, InputAdornment, InputLabel, Link, MenuItem, Paper, Select,
-  Stack, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TextField, Typography,
-  useMediaQuery,
+  Box, Button, Card, CardActionArea, CardContent, FormControl, FormControlLabel, InputAdornment, InputLabel, Link,
+  MenuItem, Paper, Select, Stack, Switch, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination,
+  TableRow, TextField, Typography, useMediaQuery,
 } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 import SearchIcon from '@mui/icons-material/Search'
+import AddIcon from '@mui/icons-material/Add'
 import { getLookups, listProjects } from '../api/projects'
+import { useAuth } from '../auth/AuthContext'
+import { can } from '../auth/roles'
+import FlagChips from '../components/FlagChips'
 import HealthBadge from '../components/HealthBadge'
+import { useNotify } from '../components/NotifyProvider'
+import ProjectFormDialog from '../components/ProjectFormDialog'
 import LifecycleChip from '../components/LifecycleChip'
 import { EmptyState, ErrorState, LoadingState } from '../components/PageState'
 import { LIFECYCLE_LABELS, PRIORITY_LABELS, formatDate, formatUsd } from '../utils/format'
@@ -65,6 +71,7 @@ function ProjectCard({ project }) {
             <LifecycleChip status={project.lifecycle_status} />
             <Typography variant="body2">Ends {formatDate(project.planned_end)}</Typography>
             <Typography variant="body2">{formatUsd(project.approved_budget)}</Typography>
+            <FlagChips flags={project.flags || []} />
           </Stack>
         </CardContent>
       </CardActionArea>
@@ -81,6 +88,12 @@ ProjectCard.propTypes = { project: PropTypes.object.isRequired }
 export default function PortfolioPage() {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
+  const { user } = useAuth()
+  const navigate = useNavigate()
+  const notify = useNotify()
+  const [creating, setCreating] = useState(false)
+  const canCreate = can(user?.role, 'project.create')
+  const canFilterMine = user?.role === 'PM' || user?.role === 'ANALYST'
   const [params, setParams] = useSearchParams()
   const [searchText, setSearchText] = useState(params.get('q') || '')
   const debouncedSearch = useDebouncedValue(searchText, 300)
@@ -117,6 +130,7 @@ export default function PortfolioPage() {
     if (current.get('q')) request.q = current.get('q')
     FILTER_KEYS.forEach((key) => { if (current.get(key)) request[key] = current.get(key) })
     if (current.get('health')) request.health = current.get('health')
+    if (current.get('mine') === 'true') request.mine = true
     return listProjects(request)
   }, `${query}|${page}|${sort}`)
 
@@ -162,7 +176,10 @@ export default function PortfolioPage() {
                 <TableCell>{formatDate(p.planned_end)}</TableCell>
                 <TableCell align="right">{formatUsd(p.approved_budget)}</TableCell>
                 <TableCell>
-                  <HealthBadge health={p.health_overall} reasons={p.health_reasons || []} lifecycleStatus={p.lifecycle_status} size="small" />
+                  <Stack spacing={0.5} alignItems="flex-start">
+                    <HealthBadge health={p.health_overall} reasons={p.health_reasons || []} lifecycleStatus={p.lifecycle_status} size="small" />
+                    <FlagChips flags={p.flags || []} />
+                  </Stack>
                 </TableCell>
               </TableRow>
             ))}
@@ -174,7 +191,12 @@ export default function PortfolioPage() {
 
   return (
     <>
-      <Typography variant="h1" component="h1" sx={{ mb: 2 }}>Portfolio</Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }} spacing={1}>
+        <Typography variant="h1" component="h1">Portfolio</Typography>
+        {canCreate && (
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreating(true)}>New project</Button>
+        )}
+      </Stack>
       <Paper sx={{ p: 2, mb: 2 }}>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} flexWrap="wrap" useFlexGap>
           <TextField
@@ -205,6 +227,12 @@ export default function PortfolioPage() {
             onChange={(v) => updateParams({ pm_user_id: v })}
             options={lookups.project_managers.map((m) => ({ value: m.id, label: m.display_name }))}
           />
+          {canFilterMine && (
+            <FormControlLabel
+              control={<Switch checked={params.get('mine') === 'true'} onChange={(e) => updateParams({ mine: e.target.checked ? 'true' : '' })} />}
+              label={user?.role === 'PM' ? 'Mine (projects I manage)' : 'Mine'}
+            />
+          )}
           <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 190 } }}>
             <InputLabel id="sort-label">Sort by</InputLabel>
             <Select labelId="sort-label" id="sort" label="Sort by" value={sort} onChange={(e) => updateParams({ sort: e.target.value })}>
@@ -231,6 +259,16 @@ export default function PortfolioPage() {
           />
         )}
       </Paper>
+      {creating && (
+        <ProjectFormDialog
+          open mode="create" lookups={lookups} onClose={() => setCreating(false)}
+          onSaved={(project) => {
+            setCreating(false)
+            notify('Project created')
+            navigate(`/portfolio/${project.id}`)
+          }}
+        />
+      )}
     </>
   )
 }

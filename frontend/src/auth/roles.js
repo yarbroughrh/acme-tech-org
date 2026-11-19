@@ -1,10 +1,10 @@
-/** Role codes, labels, home pages and navigation, kept in one place. */
+/** Role codes, labels, home pages, navigation and UI capabilities, kept in one place. */
 
 export const ROLES = {
   ADMIN: 'ADMIN',
   PMO: 'PMO',
   PM: 'PM',
-  MEMBER: 'MEMBER',
+  ANALYST: 'ANALYST',
   EXEC: 'EXEC',
 }
 
@@ -12,23 +12,28 @@ export const ROLE_LABELS = {
   ADMIN: 'Admin',
   PMO: 'Portfolio Manager',
   PM: 'Project Manager',
-  MEMBER: 'Team member',
+  ANALYST: 'PM Analyst',
   EXEC: 'Executive',
 }
 
-/** Landing page per role (later slices replace /portfolio with dashboards/queues). */
+/** Landing page per role (slice 5 replaces the Executive and PMO homes with dashboards/queues). */
 export const ROLE_HOME = {
   ADMIN: '/users',
   EXEC: '/portfolio',
   PMO: '/portfolio',
-  PM: '/portfolio',
-  MEMBER: '/my-tasks',
+  PM: '/home',
+  ANALYST: '/my-proposals',
 }
+
+/** Roles that may open the portfolio and project pages (the backend filters what each sees). */
+export const PORTFOLIO_ROLES = ['ADMIN', 'PMO', 'PM', 'EXEC', 'ANALYST']
 
 /** Navigation entries and which roles see them. `icon` is a key resolved by AppShell. */
 export const NAV_ITEMS = [
-  { path: '/portfolio', label: 'Portfolio', icon: 'portfolio', roles: ['ADMIN', 'PMO', 'PM', 'EXEC'] },
-  { path: '/my-tasks', label: 'My tasks', icon: 'tasks', roles: ['MEMBER'] },
+  { path: '/home', label: 'My work', icon: 'home', roles: ['PM'] },
+  { path: '/approvals', label: 'Approvals', icon: 'approvals', roles: ['PM'] },
+  { path: '/my-proposals', label: 'My proposals', icon: 'proposals', roles: ['ANALYST'] },
+  { path: '/portfolio', label: 'Portfolio', icon: 'portfolio', roles: PORTFOLIO_ROLES },
   { path: '/users', label: 'Users', icon: 'users', roles: ['ADMIN'] },
 ]
 
@@ -49,7 +54,8 @@ export function homeFor(role) {
 /**
  * UI capability map: mirrors backend/_shared/beacon/rbac.py so screens can hide or disable
  * actions a role cannot perform. COSMETIC ONLY: the backend enforces every permission.
- * Value = roles allowed; ownership ("own projects only") is still checked by the backend.
+ * Use this for GLOBAL decisions (navigation, "New project"). Per-project decisions must use the
+ * server-computed, ownership-aware `project.permissions` object instead.
  */
 export const CAPABILITIES = {
   'users.manage': ['ADMIN'],
@@ -62,6 +68,10 @@ export const CAPABILITIES = {
   'spend.record': ['PMO'], // Only the Portfolio Manager records actual spend (CONFIRMED)
   'status_update.submit': ['PM'],
   'health_rules.edit': ['PMO'],
+  'change_request.propose': ['ANALYST'], // PM Analysts propose; nothing applies until approved (CONFIRMED)
+  'change_request.decide': ['PM'], // only the project's own PM decides (backend checks ownership)
+  'analyst.assign': ['PMO', 'PM'],
+  'audit.read': ['ADMIN', 'PMO', 'PM'],
 }
 
 /**

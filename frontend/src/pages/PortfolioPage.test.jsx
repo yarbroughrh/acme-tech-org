@@ -4,9 +4,11 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import PortfolioPage from './PortfolioPage'
 import * as projectsApi from '../api/projects'
-import { ApiError } from '../api/client'
+import { ApiError, setSession } from '../api/client'
+import { AuthProvider } from '../auth/AuthContext'
+import { NotifyProvider } from '../components/NotifyProvider'
 
-vi.mock('../api/projects', () => ({ listProjects: vi.fn(), getLookups: vi.fn(), getProject: vi.fn() }))
+vi.mock('../api/projects', () => ({ listProjects: vi.fn(), getLookups: vi.fn(), getProject: vi.fn(), createProject: vi.fn() }))
 
 const project = (overrides = {}) => ({
   id: 'p1',
@@ -27,11 +29,16 @@ const project = (overrides = {}) => ({
 
 const lastRequest = () => projectsApi.listProjects.mock.calls.at(-1)[0]
 
-function renderPage(path = '/portfolio') {
+function renderPage(path = '/portfolio', role = 'EXEC') {
+  setSession({ token: 't', expires_at: new Date(Date.now() + 1800000).toISOString(), user: { id: 'u', role, display_name: 'U', must_change_password: false } })
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <PortfolioPage />
-    </MemoryRouter>,
+    <NotifyProvider>
+      <AuthProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <PortfolioPage />
+        </MemoryRouter>
+      </AuthProvider>
+    </NotifyProvider>,
   )
 }
 

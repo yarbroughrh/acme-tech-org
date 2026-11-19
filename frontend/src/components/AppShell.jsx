@@ -11,11 +11,19 @@ import LogoutIcon from '@mui/icons-material/Logout'
 import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined'
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined'
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined'
+import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined'
+import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined'
 import { useAuth } from '../auth/AuthContext'
 import { ROLE_LABELS, navItemsFor } from '../auth/roles'
 
 const DRAWER_WIDTH = 232
-const ICONS = { portfolio: DashboardOutlinedIcon, tasks: AssignmentOutlinedIcon, users: PeopleOutlinedIcon }
+const ICONS = {
+  home: HomeOutlinedIcon,
+  approvals: FactCheckOutlinedIcon,
+  proposals: AssignmentOutlinedIcon,
+  portfolio: DashboardOutlinedIcon,
+  users: PeopleOutlinedIcon,
+}
 
 /**
  * Application frame: app bar, role-filtered navigation (permanent drawer on desktop,

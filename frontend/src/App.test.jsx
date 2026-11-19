@@ -5,9 +5,11 @@ import App from './App'
 import { renderApp, USERS } from './test/renderWithProviders'
 import * as projectsApi from './api/projects'
 import * as usersApi from './api/users'
+import * as changeRequestsApi from './api/changeRequests'
 import { getSession } from './api/client'
 
-vi.mock('./api/projects', () => ({ listProjects: vi.fn(), getLookups: vi.fn(), getProject: vi.fn() }))
+vi.mock('./api/projects', () => ({ listProjects: vi.fn(), getLookups: vi.fn(), getProject: vi.fn(), createProject: vi.fn() }))
+vi.mock('./api/changeRequests', () => ({ listChangeRequests: vi.fn(), approveChangeRequest: vi.fn(), rejectChangeRequest: vi.fn(), proposeChange: vi.fn() }))
 vi.mock('./api/users', () => ({ listUsers: vi.fn(), createUser: vi.fn(), updateUser: vi.fn(), resetPassword: vi.fn(), unlockUser: vi.fn() }))
 
 describe('routing and role guards', () => {
@@ -15,6 +17,7 @@ describe('routing and role guards', () => {
     projectsApi.listProjects.mockResolvedValue({ items: [], page: 1, page_size: 20, total: 0 })
     projectsApi.getLookups.mockResolvedValue({ departments: [], project_managers: [] })
     usersApi.listUsers.mockResolvedValue({ items: [], page: 1, page_size: 20, total: 0 })
+    changeRequestsApi.listChangeRequests.mockResolvedValue({ items: [], page: 1, page_size: 20, total: 0 })
   })
   afterEach(() => vi.clearAllMocks())
 
@@ -28,8 +31,8 @@ describe('routing and role guards', () => {
     ['ADMIN', 'Users'],
     ['EXEC', 'Portfolio'],
     ['PMO', 'Portfolio'],
-    ['PM', 'Portfolio'],
-    ['MEMBER', 'My tasks'],
+    ['PM', 'My work'],
+    ['ANALYST', 'My proposals'],
   ])('lands %s on their home page', async (role, heading) => {
     renderApp('/', USERS[role])
     expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeInTheDocument()
@@ -46,7 +49,7 @@ describe('routing and role guards', () => {
 
   it('redirects a role away from pages it may not use', async () => {
     renderApp('/users', USERS.PM)
-    expect(await screen.findByRole('heading', { level: 1, name: 'Portfolio' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'My work' })).toBeInTheDocument()
     expect(usersApi.listUsers).not.toHaveBeenCalled()
   })
 

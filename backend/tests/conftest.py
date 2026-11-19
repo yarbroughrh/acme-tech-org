@@ -18,7 +18,7 @@ import pytest
 
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND / "_shared"))  # canonical beacon first
-SERVICES = ("auth", "users", "projects", "change-requests", "me", "people")
+SERVICES = ("auth", "users", "projects", "change-requests", "me", "people", "portfolio")
 for _svc in SERVICES:
     sys.path.append(str(BACKEND / _svc))  # service-local modules (auth_service, ...)
 

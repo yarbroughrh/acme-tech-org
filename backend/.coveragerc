@@ -10,3 +10,4 @@ omit =
     */beacon/*/beacon/*
     me/beacon/*
     people/beacon/*
+    portfolio/beacon/*

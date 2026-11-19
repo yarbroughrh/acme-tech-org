@@ -163,9 +163,11 @@ re-evaluated when `health_as_of < today` (time alone moves elapsed%).
 | 3 Health engine with reasons, flags, snapshots | Done, deployed (pulled into Slice 2, ADR-013) |
 | Decisions batch: confirmed thresholds; Admin 403 on project data; PMO-only lifecycle and rebaseline with reason; weekly spend model; departments | Backend done, deployed; some UI cut (DECISIONS Part C) |
 | 4 Allocations (40 h Amber, 60 h Red warning, no block) and People view | Done, deployed |
-| 5 "Your next actions" (all roles; ranking rule) and the minimum Executive dashboard | API deployed; UI in final integration |
+| 5 "Your next actions" (all roles; ranking rule) and the minimum Executive dashboard | Done, deployed |
+| Weekly spend entry (PMO; Budget tab, upsert on week + category) | Done, deployed |
+| Rebaseline reason + PM-locked lifecycle in the edit form | Done, deployed |
 | Portfolio "Needs attention" default sort | Done, deployed |
-| Cut deliberately | Polish pass, weekly spend screens, budget-burn chart, health trends, 1-minute warning, see DECISIONS Part C |
+| Cut deliberately | Polish pass, budget-burn chart, health trends, 1-minute warning, access-audit screen, see DECISIONS Part C |
 
 Services today: `auth`, `users`, `projects`, `change-requests`, `people`, `portfolio`, `me` (ADR-001, ADR-015).
 

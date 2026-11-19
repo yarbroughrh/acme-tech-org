@@ -15,33 +15,39 @@ ROLES = (ADMIN, PMO, PM, ANALYST, EXEC)
 ALL, OWN = "all", "own"
 
 PERMISSIONS: dict[str, dict[str, str]] = {
-    # Users and access: Admin only (CONFIRMED)
+    # Users and access: Admin only (CONFIRMED). The Admin has NO access to project data (ASSUMPTION R1, lead
+    # decision: least privilege, "Admin is user control, not project control").
     "users.manage": {ADMIN: ALL},
-    # Viewing: Admin read-only (ASSUMPTION R1); PM sees all (ASSUMPTION R2); PM Analyst sees assigned projects (CONFIRMED)
-    "project.read": {ADMIN: ALL, PMO: ALL, PM: ALL, EXEC: ALL, ANALYST: OWN},
-    "people.read": {ADMIN: ALL, PMO: ALL, PM: ALL, EXEC: ALL},
-    "portfolio.read": {ADMIN: ALL, PMO: ALL, PM: ALL, EXEC: ALL},
+    "audit.access_read": {ADMIN: ALL},  # user and access changes only
+    # Viewing: PMs see all projects read-only and edit only their own (ASSUMPTION R2: people are shared across
+    # projects, so PMs need to see clashes); Executives see the whole portfolio read-only (ASSUMPTION R8);
+    # PM Analysts see assigned projects (CONFIRMED).
+    "project.read": {PMO: ALL, PM: ALL, EXEC: ALL, ANALYST: OWN},
+    "people.read": {PMO: ALL, PM: ALL, EXEC: ALL},
+    "portfolio.read": {PMO: ALL, PM: ALL, EXEC: ALL},
+    "work_queue.read": {ADMIN: ALL, PMO: ALL, PM: OWN, ANALYST: OWN, EXEC: ALL},
     # Portfolio Manager controls the portfolio (CONFIRMED)
     "project.create": {PMO: ALL},
-    "project.set_baseline": {PMO: ALL},  # baseline dates + approved budget (ASSUMPTION R5)
+    "project.set_baseline": {PMO: ALL},   # rebaseline dates/budget, with a reason (ASSUMPTION R5)
+    "project.set_lifecycle": {PMO: ALL},  # only the PMO changes lifecycle status (ASSUMPTION R9)
     "project.assign_pm": {PMO: ALL},
     "project.archive": {PMO: ALL},
     # Project self-service: PMO any, PM own (CONFIRMED). PM Analysts never edit directly (CONFIRMED).
-    "project.edit": {PMO: ALL, PM: OWN},
+    "project.edit": {PMO: ALL, PM: OWN},  # details incl. actual start date (PM records it, ASSUMPTION R9)
     "plan.edit": {PMO: ALL, PM: OWN},  # milestones and tasks
     "allocation.edit": {PMO: ALL, PM: OWN},
-    "spend.record": {PMO: ALL},  # Only the Portfolio Manager records actual spend (CONFIRMED R6)
+    "spend.record": {PMO: ALL},  # Only the Portfolio Manager records actual spend (CONFIRMED)
     "status_update.submit": {PM: OWN},
     # Change-request workflow (CONFIRMED): analysts propose, the project's PM decides
     "change_request.propose": {ANALYST: OWN},
     "change_request.decide": {PM: OWN},
     "change_request.read": {PM: OWN, ANALYST: OWN, PMO: ALL},
-    "analyst.assign": {PM: OWN, PMO: ALL},  # ASSUMPTION A4: the PM assigns analysts to own projects
+    "analyst.assign": {PM: OWN, PMO: ALL},  # ASSUMPTION A4 (lead decision)
     # Rules (ASSUMPTION R7)
-    "health_rules.read": {ADMIN: ALL, PMO: ALL, PM: ALL, EXEC: ALL},
+    "health_rules.read": {PMO: ALL, PM: ALL, EXEC: ALL},
     "health_rules.edit": {PMO: ALL},
-    # Audit log
-    "audit.read": {ADMIN: ALL, PMO: ALL, PM: OWN},
+    # Project audit log
+    "audit.read": {PMO: ALL, PM: OWN},
 }
 
 

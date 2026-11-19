@@ -66,7 +66,14 @@ def test_rbac_has_no_health_override_action():
     ("ADMIN", "users.manage", rbac.ALL),
     ("PMO", "users.manage", None),
     ("ADMIN", "project.edit", None),       # Admin has no control over project data (CONFIRMED)
-    ("ADMIN", "project.read", rbac.ALL),   # read-only (ASSUMPTION R1)
+    ("ADMIN", "project.read", None),       # no project data at all (lead decision, ASSUMPTION R1)
+    ("ADMIN", "people.read", None),
+    ("ADMIN", "portfolio.read", None),
+    ("ADMIN", "audit.read", None),
+    ("ADMIN", "audit.access_read", rbac.ALL),
+    ("PM", "project.set_lifecycle", None),   # only the PMO changes lifecycle (lead decision)
+    ("PMO", "project.set_lifecycle", rbac.ALL),
+    ("ADMIN", "work_queue.read", rbac.ALL),
     ("EXEC", "project.edit", None),        # Executive read-only
     ("PM", "project.edit", rbac.OWN),
     ("PM", "project.create", None),

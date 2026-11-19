@@ -106,7 +106,8 @@ def test_project_edit_access_matrix(api, project, key, expected):
 
 def test_pmo_changes_baseline_and_stale_version_is_409(api, project):
     pmo = api.token("pmo")
-    status, body = api.call("PUT", f"/api/projects/{project['id']}", {"approved_budget": 300000, "version": project["version"]}, token=pmo)
+    status, body = api.call("PUT", f"/api/projects/{project['id']}", {"approved_budget": 300000, "version": project["version"],
+                                                                     "rebaseline_reason": "Scope added"}, token=pmo)
     assert status == 200 and body["project"]["approved_budget"] == 300000
     status, err = api.call("PUT", f"/api/projects/{project['id']}", {"sponsor": "X", "version": project["version"]}, token=pmo)
     assert status == 409 and "Morgan Patel" in err["error"]["details"][0]["message"]
@@ -207,7 +208,7 @@ def test_analyst_assignment_rules(api, project, other_pm_project):
     assert api.call("DELETE", f"/api/projects/{project['id']}/analysts/{analysts[1]['id']}", token=pm)[0] == 404
 
 
-@pytest.mark.parametrize("key, expected", [("admin", 200), ("pmo", 200), ("pm", 200), ("exec", 403), ("analyst1", 403)])
+@pytest.mark.parametrize("key, expected", [("admin", 403), ("pmo", 200), ("pm", 200), ("exec", 403), ("analyst1", 403)])
 def test_audit_access_matrix(api, project, key, expected):
     assert api.call("GET", f"/api/projects/{project['id']}/audit", token=api.token(key))[0] == expected
 
@@ -220,3 +221,52 @@ def test_team_lists_allocated_people(api, database):
     pid = database.execute("SELECT id FROM projects WHERE name = 'Customer Portal Rebuild'").fetchone()["id"]
     status, body = api.call("GET", f"/api/projects/{pid}/team", token=api.token("pm"))
     assert status == 200 and any(p["full_name"] == "Priya Raman" for p in body["items"])
+
+
+def test_pm_cannot_change_lifecycle_but_records_actual_start(api, project):
+    """Lead decision: only the PMO changes lifecycle status; the PM records the actual start date."""
+    pm = api.token("pm")
+    status, err = api.call("PUT", f"/api/projects/{project['id']}", {"lifecycle_status": "ON_HOLD", "version": project["version"]}, token=pm)
+    assert status == 403 and "lifecycle" in err["error"]["message"]
+    status, body = api.call("PUT", f"/api/projects/{project['id']}", {"actual_start": (TODAY - timedelta(days=8)).isoformat(),
+                                                                     "version": project["version"]}, token=pm)
+    assert status == 200 and body["project"]["actual_start"] == (TODAY - timedelta(days=8)).isoformat()
+    assert not body["project"]["permissions"]["can_change_lifecycle"]
+    status, body = api.call("PUT", f"/api/projects/{project['id']}", {"lifecycle_status": "ON_HOLD", "version": body["project"]["version"]},
+                            token=api.token("pmo"))
+    assert status == 200 and body["project"]["lifecycle_status"] == "ON_HOLD" and body["project"]["health_overall"] is None
+
+
+def test_rebaseline_needs_reason_keeps_original_and_is_audited(api, project, database):
+    pmo = api.token("pmo")
+    new_end = (TODAY + timedelta(days=150)).isoformat()
+    status, err = api.call("PUT", f"/api/projects/{project['id']}", {"planned_end": new_end, "version": project["version"]}, token=pmo)
+    assert status == 400 and err["error"]["details"][0]["field"] == "rebaseline_reason"
+    assert api.call("PUT", f"/api/projects/{project['id']}", {"planned_end": new_end, "rebaseline_reason": "x",
+                                                             "version": project["version"]}, token=api.token("pm"))[0] == 403
+    status, body = api.call("PUT", f"/api/projects/{project['id']}", {"planned_end": new_end, "approved_budget": 260000,
+                                                                     "rebaseline_reason": "Vendor delay agreed at steering",
+                                                                     "version": project["version"]}, token=pmo)
+    p = body["project"]
+    assert status == 200 and p["is_rebaselined"] and p["planned_end"] == new_end
+    assert p["original_planned_end"] == project["planned_end"] and p["original_approved_budget"] == 250000
+    history = p["rebaselines"][0]
+    assert history["reason"] == "Vendor delay agreed at steering" and history["changed_by"]["display_name"] == "Morgan Patel"
+    assert history["before"]["approved_budget"] == 250000 and history["after"]["approved_budget"] == 260000
+    assert database.execute("SELECT count(*) AS n FROM audit_log WHERE entity_id = %s AND action = 'REBASELINED'",
+                            (project["id"],)).fetchone()["n"] == 1
+    # health uses the current baseline
+    assert p["health"]["metrics"]["planned_spend_to_date"] < 260000 * 10 / 160 + 1
+
+
+def test_new_project_is_not_rebaselined(api, project):
+    assert project["is_rebaselined"] is False and project["original_planned_start"] == project["planned_start"]
+
+
+def test_admin_access_audit_shows_only_user_events(api):
+    status, body = api.call("GET", "/api/users/audit", token=api.token("admin"), query={"page_size": "100"})
+    assert status == 200 and body["total"] > 0
+    assert {i["action"] for i in body["items"]} >= {"SIGNED_IN"}
+    assert all(i["subject"] is None or "email" in i["subject"] for i in body["items"])
+    for key in ("pmo", "pm", "exec", "analyst1"):
+        assert api.call("GET", "/api/users/audit", token=api.token(key))[0] == 403

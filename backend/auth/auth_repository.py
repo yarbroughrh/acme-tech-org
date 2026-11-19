@@ -28,8 +28,8 @@ def record_failure(conn: Connection, user_id: str, failed_attempts: int, locked_
 
 def record_success(conn: Connection, user_id: str) -> None:
     """Reset the failure counter and stamp the last sign-in."""
-    execute(conn, "UPDATE users SET failed_attempts = 0, locked_until = NULL, last_login_at = now() WHERE id = %s",
-            (user_id,))
+    execute(conn, "UPDATE users SET failed_attempts = 0, locked_until = NULL, previous_login_at = last_login_at, "
+                  "last_login_at = now() WHERE id = %s", (user_id,))
 
 
 def set_password(conn: Connection, user_id: str, password_hash: str) -> dict:

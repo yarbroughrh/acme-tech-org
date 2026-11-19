@@ -5,7 +5,7 @@ import uuid
 import pytest
 
 
-@pytest.mark.parametrize("key, expected", [("admin", 200), ("pmo", 200), ("pm", 200), ("exec", 200), ("analyst1", 200)])
+@pytest.mark.parametrize("key, expected", [("admin", 403), ("pmo", 200), ("pm", 200), ("exec", 200), ("analyst1", 200)])
 def test_portfolio_access_matrix(api, key, expected):
     assert api.call("GET", "/api/projects", token=api.token(key))[0] == expected
 
@@ -79,7 +79,7 @@ def test_detail_and_404(api):
 
 def test_lookups(api):
     status, body = api.call("GET", "/api/projects/lookups", token=api.token("pm"))
-    assert status == 200 and len(body["departments"]) == 7 and len(body["project_managers"]) >= 16
+    assert status == 200 and len(body["departments"]) == 8 and len(body["project_managers"]) >= 16
     assert {a["display_name"] for a in body["analysts"]} == {"Sam Okafor", "Riley Chen"}
 
 
@@ -103,3 +103,23 @@ def test_analyst_portfolio_is_limited_to_assigned_projects(api, database):
 def test_pm_mine_filter(api):
     _, body = api.call("GET", "/api/projects", token=api.token("pm"), query={"mine": "true", "page_size": "100"})
     assert body["total"] >= 4 and all(p["pm"]["display_name"] == "Jordan Lee" for p in body["items"])
+
+
+@pytest.mark.parametrize("path", ["/api/projects", "/api/projects/lookups"])
+def test_admin_has_no_access_to_project_data(api, path):
+    """Lead decision (ASSUMPTION R1): the Admin manages users and access, not projects."""
+    status, body = api.call("GET", path, token=api.token("admin"))
+    assert status == 403 and body["error"]["code"] == "FORBIDDEN"
+
+
+def test_admin_cannot_read_a_project_or_its_children(api, database):
+    pid = database.execute("SELECT id FROM projects WHERE name = 'Customer Portal Rebuild'").fetchone()["id"]
+    for suffix in ("", "/milestones", "/tasks", "/status-updates", "/team", "/audit"):
+        assert api.call("GET", f"/api/projects/{pid}{suffix}", token=api.token("admin"))[0] == 403, suffix
+
+
+def test_departments_are_the_business_departments(api):
+    _, body = api.call("GET", "/api/projects/lookups", token=api.token("pmo"))
+    assert sorted(d["name"] for d in body["departments"]) == sorted([
+        "Finance", "Human Resources", "Operations", "Sales", "Marketing", "Legal and Compliance",
+        "Customer Service", "Supply Chain"])

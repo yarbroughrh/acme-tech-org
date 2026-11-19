@@ -67,6 +67,8 @@ def permissions(conn: Connection, principal: Principal, project: dict) -> dict[s
     return {
         "can_edit": writable and ok("project.edit"),
         "can_edit_baseline": writable and ok("project.set_baseline"),
+        "can_change_lifecycle": writable and ok("project.set_lifecycle"),
+        "can_edit_allocations": writable and ok("allocation.edit"),
         "can_archive": writable and ok("project.archive"),
         "can_edit_plan": writable and ok("plan.edit"),
         "can_submit_status": writable and ok("status_update.submit"),

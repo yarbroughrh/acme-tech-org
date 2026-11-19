@@ -6,6 +6,7 @@
 - Health is recalculated in the same transaction as any change to its inputs.
 """
 
+import json
 import uuid
 from decimal import Decimal
 from typing import Any
@@ -17,7 +18,7 @@ from beacon import audit, health_store, rbac
 from beacon import project_access as access
 from beacon.auth import Principal
 from beacon.errors import Conflict, Forbidden, NotFound, ValidationError, field_error
-from beacon.http import page_params, paged
+from beacon.http import json_default, page_params, paged
 from beacon.plan import require_version
 from beacon.validation import Fields
 
@@ -141,13 +142,21 @@ def update_project(conn: Connection, principal: Principal, project_id: str, body
     current = access.load_project(conn, project_id, for_update=True)
     access.authorize(conn, principal, "project.edit", current)
     access.ensure_not_archived(current)
-    version = Fields(body).integer("version", required=True, min_value=1)
-    if version is None:
-        raise ValidationError("Please correct the highlighted fields.", [field_error("version", "Version is required.")])
-    changes = _validate(conn, {k: v for k, v in body.items() if k != "version"}, partial=True, current=current)
+    meta = Fields(body)
+    version = meta.integer("version", required=True, min_value=1)
+    reason = meta.string("rebaseline_reason", max_len=1000)
+    meta.raise_if_errors()
+    changes = _validate(conn, {k: v for k, v in body.items() if k not in ("version", "rebaseline_reason")},
+                        partial=True, current=current)
     changes = {k: v for k, v in changes.items() if v != current.get(k)}
-    if any(f in changes for f in BASELINE_FIELDS) and rbac.scope_for(principal, "project.set_baseline") is None:
+    rebaseline = {k: changes[k] for k in BASELINE_FIELDS if k in changes}
+    if rebaseline and rbac.scope_for(principal, "project.set_baseline") is None:
         raise Forbidden("Only the Portfolio Manager can change baseline dates and the approved budget.")
+    if "lifecycle_status" in changes and rbac.scope_for(principal, "project.set_lifecycle") is None:
+        raise Forbidden("Only the Portfolio Manager can change a project's lifecycle status.")
+    if rebaseline and not reason:
+        raise ValidationError("A reason is required to rebaseline a project.",
+                              [field_error("rebaseline_reason", "Explain why the baseline is changing.")])
     if "pm_user_id" in changes and rbac.scope_for(principal, "project.assign_pm") is None:
         raise Forbidden("Only the Portfolio Manager can assign the project manager.")
     if "department_id" in changes and rbac.scope_for(principal, "project.set_baseline") is None:
@@ -160,6 +169,12 @@ def update_project(conn: Connection, principal: Principal, project_id: str, body
         repo.update_project(conn, principal.user_id, project_id, changes)
         audit.record(conn, principal.user_id, "project", project_id, "UPDATED",
                      before={k: current.get(k) for k in changes}, after=changes, project_id=project_id)
+        if rebaseline:
+            before = {k: current.get(k) for k in rebaseline}
+            repo.insert_rebaseline(conn, principal.user_id, project_id, reason,
+                                   json.dumps(before, default=json_default), json.dumps(rebaseline, default=json_default))
+            audit.record(conn, principal.user_id, "project", project_id, "REBASELINED", before=before,
+                         after={**rebaseline, "reason": reason}, project_id=project_id)
         health_store.recalculate(conn, [project_id])
     return 200, {"project": detail(conn, principal, project_id)}
 

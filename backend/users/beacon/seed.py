@@ -47,6 +47,44 @@ def _clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
     return max(low, min(high, value))
 
 
+def monday(day: date) -> date:
+    """The Monday of the ISO week containing ``day``."""
+    return day - timedelta(days=day.weekday())
+
+
+def weekly_spend_rows(rnd: random.Random, project_id: str, start: date, end: date, total: float, recorded_by: str,
+                      today: date, missing_weeks: int = 0) -> list[tuple]:
+    """One row per completed week (and category) from the project's first week to last week.
+
+    The most recent ``missing_weeks`` weeks are left empty so the Portfolio Manager's work queue
+    shows "no spend recorded" items in the demo.
+    """
+    last_complete = min(monday(today) - timedelta(days=7), monday(end))
+    weeks = []
+    week = monday(start)
+    while week <= last_complete:
+        weeks.append(week)
+        week += timedelta(days=7)
+    if missing_weeks:
+        weeks = weeks[:-missing_weeks] if len(weeks) > missing_weeks else []
+    if not weeks:
+        return []
+    weights = [rnd.uniform(0.8, 1.2) for _ in weeks]
+    scale = total / sum(weights)
+    rows = []
+    for week, weight in zip(weeks, weights):
+        amount = weight * scale
+        split = {"LABOUR": amount}
+        if rnd.random() < 0.35:  # some weeks also carry vendor or licence costs
+            other = rnd.choice(cfg.SPEND_CATEGORIES[1:])
+            split = {"LABOUR": amount * 0.7, other: amount * 0.3}
+        for category, value in split.items():
+            value = Decimal(str(round(value, 2)))
+            if value > 0:
+                rows.append((_id(), project_id, week, value, category, cfg.WEEKLY_SPEND_NOTE, recorded_by, recorded_by))
+    return rows
+
+
 class _Builder:
     """Accumulates rows in memory, then bulk-inserts them."""
 
@@ -160,7 +198,7 @@ class _Builder:
         self.rows["projects"].append((
             project_id, name, f"{name} for ACME Enterprise Technology.", rnd.choice(cfg.SPONSORS), dept_id,
             pm_user, start, end, actual_start, budget, lifecycle,
-            rnd.choices(["LOW", "MEDIUM", "HIGH"], [2, 5, 3])[0], pmo_user))
+            rnd.choices(["LOW", "MEDIUM", "HIGH"], [2, 5, 3])[0], pmo_user, start, end, budget))
 
         elapsed_days = (today - start).days
         elapsed = _clamp(elapsed_days / duration)
@@ -184,7 +222,8 @@ class _Builder:
         team = self.allocate(project_id, lifecycle, start, end, people, priya, member_person, profile)
         self.milestones(project_id, lifecycle, profile, start, end, duration, progress_days, team)
         self.spend(project_id, lifecycle, start, end, budget,
-                   elapsed * spend_factor if lifecycle != "CLOSED" else 0.97, pmo_user)
+                   elapsed * spend_factor if lifecycle != "CLOSED" else 0.97, pmo_user,
+                   missing_weeks=2 if profile == "overdue" else 1 if profile == "steady" else 0)
         self.status_updates(project_id, lifecycle, profile, actual_start, pm_user)
 
     def milestones(self, project_id: str, lifecycle: str, profile: str, start: date, end: date,
@@ -257,23 +296,13 @@ class _Builder:
         return team
 
     def spend(self, project_id: str, lifecycle: str, start: date, end: date, budget: Decimal,
-              fraction_of_budget: float, recorded_by: str) -> None:
-        """Monthly spend entries, recorded by the Portfolio Manager (only PMO records spend, CONFIRMED)."""
+              fraction_of_budget: float, recorded_by: str, missing_weeks: int = 0) -> None:
+        """Weekly spend recorded by the Portfolio Manager (CONFIRMED: weekly, PMO only)."""
         if lifecycle == "PROPOSED" or fraction_of_budget <= 0:
             return
-        rnd, today = self.rnd, self.today
-        last = min(today, end)
-        months = max(1, (last - start).days // 30)
         total = float(budget) * fraction_of_budget
-        weights = [rnd.uniform(0.8, 1.2) for _ in range(months)]
-        scale = total / sum(weights)
-        for m, weight in enumerate(weights):
-            spent_on = min(start + timedelta(days=30 * m + 15), last)
-            amount = Decimal(str(round(weight * scale, 2)))
-            if amount <= 0:
-                continue
-            category = rnd.choices(["LABOUR", "VENDOR", "SOFTWARE_HARDWARE", "OTHER"], [6, 3, 2, 1])[0]
-            self.rows["spend_entries"].append((_id(), project_id, spent_on, amount, category, None, recorded_by))
+        self.rows["spend_entries"].extend(
+            weekly_spend_rows(self.rnd, project_id, start, end, total, recorded_by, self.today, missing_weeks))
 
     def status_updates(self, project_id: str, lifecycle: str, profile: str, actual_start: date | None,
                        pm_user: str) -> None:
@@ -302,16 +331,17 @@ _INSERTS = {
     "users": "INSERT INTO users (id, email, display_name, role, password_hash, must_change_password) VALUES (%s, %s, %s, %s, %s, %s)",
     "people": "INSERT INTO people (id, full_name, email, job_title, department_id, user_id) VALUES (%s, %s, %s, %s, %s, %s)",
     "projects": ("INSERT INTO projects (id, name, description, sponsor, department_id, pm_user_id, planned_start, planned_end, "
-                 "actual_start, approved_budget, lifecycle_status, priority, created_by) "
-                 "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"),
+                 "actual_start, approved_budget, lifecycle_status, priority, created_by, original_planned_start, "
+                 "original_planned_end, original_approved_budget) "
+                 "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"),
     "milestones": ("INSERT INTO milestones (id, project_id, name, owner_person_id, due_date, status, percent_complete) "
                    "VALUES (%s, %s, %s, %s, %s, %s, %s)"),
     "tasks": ("INSERT INTO tasks (id, project_id, milestone_id, title, status, assignee_person_id, due_date) "
               "VALUES (%s, %s, %s, %s, %s, %s, %s)"),
     "allocations": ("INSERT INTO allocations (id, person_id, project_id, hours_per_week, start_date, end_date) "
                     "VALUES (%s, %s, %s, %s, %s, %s)"),
-    "spend_entries": ("INSERT INTO spend_entries (id, project_id, spent_on, amount, category, note, created_by) "
-                      "VALUES (%s, %s, %s, %s, %s, %s, %s)"),
+    "spend_entries": ("INSERT INTO spend_entries (id, project_id, week_starting, amount, category, note, created_by, updated_by) "
+                      "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"),
     "status_updates": ("INSERT INTO status_updates (id, project_id, author_user_id, reported_status, summary, created_at) "
                        "VALUES (%s, %s, %s, %s, %s, %s)"),
 }
@@ -420,7 +450,77 @@ def _seed_v2(conn: Connection, today: date) -> dict[str, int]:
     return {"analysts_assigned": assigned, "change_requests": created}
 
 
-_STEPS = {"v1": _seed_v1, "v2": _seed_v2}
+def _seed_v3(conn: Connection, today: date) -> dict[str, int]:
+    """Weekly spend (CONFIRMED) and the "Your next actions" demo story. Idempotent by lookup.
+
+    - Databases seeded before weekly spend: legacy entries are soft-deleted (kept) and replaced by weekly
+      entries with the same total, leaving recent weeks missing on two story projects.
+    - Over 60 h/week: Marcus Webb is allocated 64 h across three Active projects (Red warning, CONFIRMED).
+    - A locked account, a recent role change and a project that turned Red in the last 7 days.
+    """
+    rnd = random.Random(cfg.RANDOM_SEED + 3)
+    counts = {"spend_converted_projects": 0, "spend_rows": 0}
+    pmo = _user_by_email(conn, next(a["email"] for a in cfg.DEMO_ACCOUNTS if a["key"] == "pmo"))
+    legacy = conn.execute(
+        "SELECT p.id, p.planned_start, p.planned_end, p.lifecycle_status, sum(s.amount) AS total FROM spend_entries s "
+        "JOIN projects p ON p.id = s.project_id WHERE s.deleted_at IS NULL GROUP BY p.id "
+        "HAVING bool_and(s.note IS DISTINCT FROM %s)", (cfg.WEEKLY_SPEND_NOTE,)).fetchall()
+    missing = {STORY["overdue"]: 2, STORY["steady"]: 1}
+    names = {r["id"]: r["name"] for r in conn.execute("SELECT id, name FROM projects").fetchall()}
+    with conn.cursor() as cur:
+        for row in legacy:
+            cur.execute("UPDATE spend_entries SET deleted_at = now() WHERE project_id = %s AND deleted_at IS NULL", (row["id"],))
+            rows = weekly_spend_rows(rnd, str(row["id"]), row["planned_start"], row["planned_end"], float(row["total"]),
+                                     str(pmo["id"]), today, missing.get(names[row["id"]], 0))
+            if rows:
+                cur.executemany(_INSERTS["spend_entries"], rows)
+            counts["spend_converted_projects"] += 1
+            counts["spend_rows"] += len(rows)
+
+    # Severely over-allocated person (> 60 h/week)
+    marcus = conn.execute("SELECT id FROM people WHERE email = 'marcus.webb@acme.example'").fetchone()
+    if marcus is None:
+        marcus = conn.execute("INSERT INTO people (full_name, email, job_title, department_id) SELECT 'Marcus Webb', "
+                              "'marcus.webb@acme.example', 'Integration Lead', (SELECT id FROM departments ORDER BY name "
+                              "LIMIT 1) RETURNING id").fetchone()
+        targets = conn.execute("SELECT id, planned_start, planned_end FROM projects WHERE name = ANY(%s) ORDER BY name",
+                               ([STORY["mismatch"], STORY["late"], STORY["steady"]],)).fetchall()
+        for project, hours in zip(targets, (24, 20, 20)):
+            conn.execute("INSERT INTO allocations (person_id, project_id, hours_per_week, start_date, end_date) "
+                         "VALUES (%s, %s, %s, %s, %s)", (marcus["id"], project["id"], hours, project["planned_start"],
+                                                          project["planned_end"]))
+        counts["severe_person"] = 1
+
+    # A locked account and a recent role change for the Admin's queue (demo state; the lockout rule itself is 15 min)
+    admin = _user_by_email(conn, next(a["email"] for a in cfg.DEMO_ACCOUNTS if a["key"] == "admin"))
+    locked = conn.execute("SELECT id FROM users WHERE role = 'PM' AND password_hash IS NULL AND locked_until IS NULL "
+                          "ORDER BY email LIMIT 1").fetchone()
+    if locked and not conn.execute("SELECT 1 FROM users WHERE locked_until > now()").fetchone():
+        conn.execute("UPDATE users SET locked_until = now() + interval '30 days' WHERE id = %s", (locked["id"],))
+        conn.execute("INSERT INTO audit_log (actor_user_id, entity_type, entity_id, action, after) "
+                     "VALUES (%s, 'user', %s, 'LOCKED_OUT', %s::jsonb)",
+                     (locked["id"], locked["id"], json.dumps({"reason": "5 failed sign-ins (demo data)"})))
+        changed = conn.execute("SELECT id FROM users WHERE role = 'PM' AND id <> %s ORDER BY email OFFSET 1 LIMIT 1",
+                               (locked["id"],)).fetchone()
+        conn.execute("INSERT INTO audit_log (at, actor_user_id, entity_type, entity_id, action, before, after) "
+                     "VALUES (now() - interval '2 days', %s, 'user', %s, 'UPDATED', %s::jsonb, %s::jsonb)",
+                     (admin["id"], changed["id"], json.dumps({"role": "ANALYST"}), json.dumps({"role": "PM"})))
+        counts["admin_story"] = 1
+
+    # Health history: Payments Gateway Upgrade was Amber 5 days ago (so it "turned Red" this week);
+    # Customer Portal Rebuild has been Red for longer (Amber 20 days ago).
+    for name, days_ago in ((STORY["late"], 5), (STORY["mismatch"], 20)):
+        project = conn.execute("SELECT id FROM projects WHERE name = %s", (name,)).fetchone()
+        if project and not conn.execute("SELECT 1 FROM health_snapshots WHERE project_id = %s AND overall = 'AMBER' "
+                                        "AND taken_at < now() - interval '1 day'", (project["id"],)).fetchone():
+            conn.execute("INSERT INTO health_snapshots (project_id, overall, dimensions, reasons, flags, taken_at) "
+                         "VALUES (%s, 'AMBER', %s::jsonb, %s::jsonb, '{}', now() - make_interval(days => %s))",
+                         (project["id"], json.dumps({"schedule": "AMBER", "budget": "GREEN", "milestones": "AMBER"}),
+                          json.dumps(["Milestones: one milestone was late."]), days_ago))
+    return counts
+
+
+_STEPS = {"v1": _seed_v1, "v2": _seed_v2, "v3": _seed_v3}
 
 
 def run_seed(conn: Connection, today: date | None = None) -> dict[str, Any]:

@@ -109,3 +109,11 @@ def _stale(conn: Connection, user_id: str) -> Conflict:
     when = info.get("updated_at")
     return Conflict("This user was changed by someone else. Reload and try again.",
                     [field_error("version", f"Changed by {who} at {when.isoformat() if when else 'an unknown time'}.")])
+
+
+def access_audit(conn: Connection, principal: Principal, query: dict[str, str]) -> tuple[int, dict]:
+    """Admin view of user and access changes: sign-ins, lockouts, creations, role changes, resets."""
+    rbac.require(principal, "audit.access_read")
+    limit, offset, _ = page_params(query, {"at": "a.at"}, "-at")
+    items, total = repo.access_audit(conn, limit, offset)
+    return 200, paged(items, total, query)

@@ -73,9 +73,28 @@ def list_projects(conn: Connection, filters: dict[str, Any], limit: int, offset:
 
 def get_project(conn: Connection, project_id: Any) -> dict | None:
     """Full project detail including the stored health result."""
-    return fetch_one(conn, f"SELECT {_LIST_COLUMNS}, p.description, p.sponsor, p.actual_start, p.pm_user_id, "
-                           f"p.department_id, p.health_detail AS health, p.created_at, p.updated_at, p.updated_by "
-                           f"{_FROM} WHERE p.id = %s", (project_id,))
+    project = fetch_one(conn, f"SELECT {_LIST_COLUMNS}, p.description, p.sponsor, p.actual_start, p.pm_user_id, "
+                              f"p.department_id, p.health_detail AS health, p.created_at, p.updated_at, p.updated_by, "
+                              f"p.original_planned_start, p.original_planned_end, p.original_approved_budget "
+                              f"{_FROM} WHERE p.id = %s", (project_id,))
+    if project is not None:
+        project["rebaselines"] = rebaselines(conn, project_id)
+        project["is_rebaselined"] = bool(project["rebaselines"])
+    return project
+
+
+def rebaselines(conn: Connection, project_id: Any) -> list[dict]:
+    """Rebaseline history, newest first."""
+    return fetch_all(conn, "SELECT r.id, r.changed_at, r.reason, r.before, r.after, "
+                           "json_build_object('id', u.id, 'display_name', u.display_name) AS changed_by "
+                           "FROM project_rebaselines r JOIN users u ON u.id = r.changed_by WHERE r.project_id = %s "
+                           "ORDER BY r.changed_at DESC", (project_id,))
+
+
+def insert_rebaseline(conn: Connection, actor_id: str, project_id: Any, reason: str, before_json: str, after_json: str) -> None:
+    """Record one rebaseline with the reason and before/after values."""
+    execute(conn, "INSERT INTO project_rebaselines (project_id, changed_by, reason, before, after) "
+                  "VALUES (%s, %s, %s, %s::jsonb, %s::jsonb)", (project_id, actor_id, reason, before_json, after_json))
 
 
 def name_taken(conn: Connection, name: str, exclude_id: Any = None) -> bool:
@@ -97,9 +116,12 @@ def is_active_pm(conn: Connection, user_id: str) -> bool:
 def insert_project(conn: Connection, actor_id: str, values: dict[str, Any]) -> Any:
     """Insert a project and return its id."""
     cols = [c for c in EDITABLE if c in values]
-    row = fetch_one(conn, f"INSERT INTO projects ({', '.join(cols)}, created_by, updated_by) "  # nosec B608 - whitelisted
-                          f"VALUES ({', '.join(['%s'] * len(cols))}, %s, %s) RETURNING id",
-                    [values[c] for c in cols] + [actor_id, actor_id])
+    # The original baseline is kept forever; rebaselining only changes the current values.
+    row = fetch_one(conn, f"INSERT INTO projects ({', '.join(cols)}, original_planned_start, original_planned_end, "  # nosec B608
+                          f"original_approved_budget, created_by, updated_by) "
+                          f"VALUES ({', '.join(['%s'] * len(cols))}, %s, %s, %s, %s, %s) RETURNING id",
+                    [values[c] for c in cols] + [values["planned_start"], values["planned_end"], values["approved_budget"],
+                                                 actor_id, actor_id])
     return row["id"]
 
 

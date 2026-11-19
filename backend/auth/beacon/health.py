@@ -4,21 +4,23 @@
 ``{overall, dimensions, reasons, flags, metrics}``. Callers pass APPROVED data only. Pending change
 requests live in their own table and never reach this function (CONFIRMED).
 
-Rules (thresholds come from the ``health_rules`` table; "more than" is strict ``>``):
-- Only Active projects get health (ASSUMPTION H1); others report their lifecycle status.
-- Schedule (dimension CONFIRMED, thresholds ASSUMPTION): elapsed % = days since planned start ÷
-  planned duration; progress % = average milestone completion (share of tasks done, or the PM's
-  percentage when a milestone has no tasks). Amber: lag > amber pts, or actual start > N days
-  after planned start. Red: lag > red pts, or planned end passed and not complete.
-- Budget: planned spend to date = approved budget × elapsed %. Amber: actual > planned by > amber %,
-  or % of budget spent exceeds progress % by > N pts. Red: actual > planned by > red %, or actual >
-  approved budget.
-- Milestones: at risk = due within N days and < M% complete; late = past due and not complete.
-  Amber: any at risk, or ≥ amber-count late. Red: ≥ red-count late, or any more than N days late.
-- Overall = the worst of the three (CONFIRMED).
-- Flags (never change the colour): STATUS_MISMATCH when the PM's latest reported status is better
-  than calculated (ASSUMPTION H9); UPDATE_OVERDUE when there has been no status update for more
-  than 7 days (CONFIRMED).
+Rules (thresholds come from the ``health_rules`` table; "more than" is strict ``>``). All CONFIRMED by the
+stakeholder on 2026-11-19 unless marked ASSUMPTION:
+- Only Active projects get a health colour; Proposed, On hold, Closed and Cancelled show their lifecycle
+  status and are excluded from health counts.
+- Schedule: elapsed % = days since planned start ÷ planned duration (current baseline); progress % =
+  average milestone completion (share of tasks done, or the PM's percentage when a milestone has no
+  tasks). Amber: progress trails elapsed by > 10 pts. Red: > 25 pts, or past the planned end and not
+  complete. ASSUMPTION: Amber if the actual start is > 7 days after the planned start; Amber if there
+  are no milestones.
+- Budget: planned spend to date = approved budget × elapsed %; actual = all weekly entries up to the
+  current week. Amber: actual > planned by > 10%. Red: > 20%, or over the approved budget.
+  ASSUMPTION: Amber when % of budget spent exceeds progress % by > 15 pts (spending ahead of delivery).
+- Milestones: at risk = due within 7 days and < 75% complete; late = past due and not complete.
+  Amber: any at risk, or one late. Red: two or more late, or any more than 14 days late.
+- Overall = the worst of the three.
+- Flags (never change the colour): STATUS_MISMATCH when the PM's latest reported status is better than
+  calculated; UPDATE_OVERDUE when there has been no status update for more than 7 days.
 """
 
 from datetime import date
@@ -92,7 +94,8 @@ def evaluate_health(project: dict, milestones: list[dict], tasks: list[dict], sp
                 "reasons": [f"{label}: health is calculated for Active projects only."]}
 
     milestones, tasks = _active(milestones), _active(tasks)
-    spend_entries = [s for s in _active(spend_entries) if s["spent_on"] <= today]
+    # Actual spend to date = all weekly entries up to and including the current week (CONFIRMED)
+    spend_entries = [s for s in _active(spend_entries) if s["week_starting"] <= today]
 
     start, end = project["planned_start"], project["planned_end"]
     duration = max((end - start).days, 1)

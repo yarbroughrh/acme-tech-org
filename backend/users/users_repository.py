@@ -90,3 +90,18 @@ def unlock(conn: Connection, actor_id: str, user_id: str) -> dict:
     fetch_one(conn, "UPDATE users SET failed_attempts = 0, locked_until = NULL, version = version + 1, "
                     "updated_at = now(), updated_by = %s WHERE id = %s RETURNING id", (actor_id, user_id))
     return get_user(conn, user_id)
+
+
+def access_audit(conn: Connection, limit: int, offset: int) -> tuple[list[dict], int]:
+    """User and access changes only (never project data), newest first."""
+    rows = fetch_all(conn, "SELECT a.id, a.at, a.action, a.before, a.after, "
+                           "CASE WHEN act.id IS NULL THEN NULL ELSE json_build_object('id', act.id, 'display_name', act.display_name) END AS actor, "
+                           "CASE WHEN sub.id IS NULL THEN NULL ELSE json_build_object('id', sub.id, 'display_name', sub.display_name, "
+                           "'email', sub.email) END AS subject, count(*) OVER () AS total "
+                           "FROM audit_log a LEFT JOIN users act ON act.id = a.actor_user_id "
+                           "LEFT JOIN users sub ON sub.id = a.entity_id "
+                           "WHERE a.entity_type = 'user' ORDER BY a.at DESC, a.id DESC LIMIT %s OFFSET %s", (limit, offset))
+    total = rows[0]["total"] if rows else 0
+    for row in rows:
+        row.pop("total", None)
+    return rows, total

@@ -41,8 +41,8 @@ def recalculate(conn: Connection, project_ids: list, today: date | None = None) 
                                         "WHERE project_id = ANY(%s::uuid[]) AND deleted_at IS NULL AND archived_at IS NULL", (ids,)))
     tasks = _group(fetch_all(conn, "SELECT project_id, milestone_id, status FROM tasks WHERE project_id = ANY(%s::uuid[]) "
                                    "AND deleted_at IS NULL AND archived_at IS NULL", (ids,)))
-    spend = _group(fetch_all(conn, "SELECT project_id, spent_on, amount FROM spend_entries WHERE project_id = ANY(%s::uuid[]) "
-                                   "AND deleted_at IS NULL AND spent_on <= %s", (ids, today)))
+    spend = _group(fetch_all(conn, "SELECT project_id, week_starting, amount FROM spend_entries WHERE project_id = ANY(%s::uuid[]) "
+                                   "AND deleted_at IS NULL AND week_starting <= %s", (ids, today)))
     latest_updates = _group(fetch_all(conn, "SELECT DISTINCT ON (project_id) project_id, reported_status, created_at "
                                             "FROM status_updates WHERE project_id = ANY(%s::uuid[]) "
                                             "ORDER BY project_id, created_at DESC", (ids,)))

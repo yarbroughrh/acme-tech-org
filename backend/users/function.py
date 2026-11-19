@@ -3,6 +3,7 @@
 Routes (cloud ``/api/users/...``; local proxy strips ``/api/users``):
     GET  /                        list (q, role, page, page_size, sort)
     POST /                        create (returns a one-time temporary password)
+    GET  /audit                   user and access changes (Admin)
     GET  /{id}                    one user
     PUT  /{id}                    update display_name / role / is_active (requires version)
     POST /{id}/reset-password     issue a temporary password
@@ -33,6 +34,12 @@ def list_users(req: Request, conn) -> tuple[int, dict]:
 def create_user(req: Request, conn) -> tuple[int, dict]:
     """Create a user."""
     return users_service.create_user(conn, req.user, req.json())
+
+
+@router.route("GET", "/audit")
+def access_audit(req: Request, conn) -> tuple[int, dict]:
+    """User and access audit (Admin only)."""
+    return users_service.access_audit(conn, req.user, req.query)
 
 
 @router.route("GET", "/{id}")

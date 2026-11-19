@@ -25,7 +25,7 @@ def milestone(mid="m1", name="Go-live", due=END, pct=50, status="IN_PROGRESS", *
 
 
 def spend(amount, on=TODAY - timedelta(days=1), **over):
-    return {"spent_on": on, "amount": amount, **over}
+    return {"week_starting": on, "amount": amount, **over}
 
 
 def update(days_ago=1, reported="GREEN"):

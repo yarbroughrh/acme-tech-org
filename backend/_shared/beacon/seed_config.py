@@ -5,7 +5,7 @@ policy. In production these accounts would not exist (see docs/PRODUCTION-READIN
 """
 
 SEED_VERSION = "v1"  # base data (see SEED_VERSIONS for incremental additions)
-SEED_VERSIONS = ("v1", "v2")  # v2: PM Analyst accounts, assignments and demo proposals
+SEED_VERSIONS = ("v1", "v2", "v3")  # v2: PM Analysts + proposals; v3: weekly spend + work-queue story
 RANDOM_SEED = 20261119
 PROJECT_COUNT = 120
 PEOPLE_COUNT = 150
@@ -20,10 +20,13 @@ DEMO_ACCOUNTS = [
     {"key": "exec", "email": "exec@acme.example", "display_name": "Taylor Brooks", "role": "EXEC", "password": "Beacon!Exec2026"},
 ]
 
+# Lead decision (ASSUMPTION): the business departments; kept in a table so they can be edited later.
 DEPARTMENTS = [
-    "Digital Channels", "Data & Analytics", "Infrastructure & Cloud", "Cyber Security",
-    "Enterprise Applications", "Workplace Technology", "Risk & Compliance Technology",
+    "Finance", "Human Resources", "Operations", "Sales", "Marketing", "Legal and Compliance",
+    "Customer Service", "Supply Chain",
 ]
+SPEND_CATEGORIES = ("LABOUR", "CONTRACTORS_VENDORS", "SOFTWARE_LICENCES", "HARDWARE_INFRA", "OTHER")
+WEEKLY_SPEND_NOTE = "Weekly actuals"
 
 FIRST_NAMES = [
     "Alex", "Bailey", "Casey", "Dana", "Elliot", "Farah", "Gabriel", "Hana", "Imran", "Jamie",

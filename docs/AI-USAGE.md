@@ -50,6 +50,12 @@ in control.
 - **During the demo the lead froze deployments:** "do NOT deploy anything until I say so". Claude committed locally
   only. For the pre-demo sort tweak it deployed from an isolated worktree, so nothing else shipped (ADR-016).
 
+- **The 14:50 hard stop was respected even when new confirmed requirements arrived at 15:09.** Claude reported the
+  conflict, did not start the features, recorded them as confirmed-but-not-implemented, and asked the lead whether
+  to make an exception before the 16:00 freeze.
+- **Claude kept a feature the lead asked to drop** (weekly spend entry), because it was already live and verified.
+  It said so plainly rather than silently removing working code.
+
 ## What the AI got wrong, and how it was caught
 - **CloudFront masked API 404s as 200 HTML.** This was found by the lead's evidence pass when a "PM creates spend"
   check returned 200; it was fixed with an approved infra change.

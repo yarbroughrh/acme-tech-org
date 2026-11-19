@@ -71,7 +71,8 @@ source ENVIRONMENT.config && aws lambda invoke --function-name coding-workshop-u
 
 ## Documentation
 
-- [docs/PLAN.md](docs/PLAN.md): delivery plan, scope, architecture, data model, health rules
+- **[docs/DESIGN.md](docs/DESIGN.md): the design as built (roles, architecture, data model, health engine, flows, API, security)**
+- [docs/PLAN.md](docs/PLAN.md): the original delivery plan
 - [docs/DECISIONS.md](docs/DECISIONS.md): ADRs and every business rule (CONFIRMED / ASSUMPTION)
 - [docs/PROGRESS.md](docs/PROGRESS.md): what's live, risks, click-through checklist
 - [docs/TESTING.md](docs/TESTING.md): what is tested, results, known gaps

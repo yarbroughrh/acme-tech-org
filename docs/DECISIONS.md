@@ -186,7 +186,8 @@ rationale, pending stakeholder confirmation · **ASSUMPTION** = engineering defa
 | # | Rule | Value | Status | Rationale / source |
 |---|---|---|---|---|
 | R1 | Admin = users and access only; **403 on all project, people, spend and report endpoints**; sees user management and an access audit (user/access changes only) | | LEAD DECISION (ASSUMPTION) | Least privilege: "Admin is user control, not project control" |
-| R2 | PMs view all projects read-only and edit only their own | | LEAD DECISION (ASSUMPTION) | People are shared across projects, so PMs need to see clashes |
+| R2 | ~~PMs view all projects read-only and edit only their own~~ **Superseded:** PMs may edit ANY project, including deadline and budget (increase or decrease), milestones, tasks and allocations; mandatory reason for deadline/budget changes; original baseline kept with a "Rebaselined" badge; every edit audited with editor name and role; PMO queue item for budget/deadline changes in the last 7 days; assigned-PM queue item when another PM edits their project | | **CONFIRMED (stakeholder, late on 2026-11-19), NOT YET IMPLEMENTED** | Reverses lead decision R2/R5 (#6). Arrived after the 14:50 feature freeze; the live system still enforces "own projects only" for PM edits and PMO-only rebaselining (see Part C) |
+| R2b | Approving/rejecting analyst change requests and weekly status updates stay with the **assigned** PM only; lifecycle and spend stay PMO only; Executive read-only; Admin no project data | | ASSUMPTION (lead) | Accountability stays with the named PM |
 | R8 | Executives see the whole portfolio read-only, with a department filter | | LEAD DECISION (ASSUMPTION) | The steering committee governs the whole portfolio |
 | R3 | **PM Analyst** replaces Team member: works on assigned projects, proposes changes to milestones/tasks (status, % complete, notes, due dates); nothing applies until the project's PM approves; rejection needs a reason; health uses approved data only | | **CONFIRMED** | ADR-012 |
 | A4 | A PM assigns analysts to their own projects; the PMO to any project; an analyst can be on several projects (`project_analysts`) | | LEAD DECISION (ASSUMPTION) | |
@@ -228,6 +229,9 @@ rationale, pending stakeholder confirmation · **ASSUMPTION** = engineering defa
 
 ## Part C: Deliberate cuts (lead's decisions, 2026-11-19; final at the 14:50 feature stop)
 
+Note: the lead's 15:09 message asked to drop weekly spend entry as a cut, but it had already been built, tested and
+deployed (14:13; verified live). It was **kept** because removing a working feature carries more risk than keeping it.
+
 Cut to deliver a deployed, tested MVP by the 16:00 freeze. Each cut lists what we would do next.
 
 | Cut | Why | Next step |
@@ -239,6 +243,9 @@ Cut to deliver a deployed, tested MVP by the 16:00 freeze. Each cut lists what w
 | `POST /users` idempotency | Time | Wrap the create in `beacon.idempotency.run` like other creates |
 | Admin access-audit **screen** | Time | `GET /api/users/audit` is live and tested |
 | Showing the original baseline / "Rebaselined" badge in the UI | Time | API returns `original_*`, `is_rebaselined` and history |
+| **Stakeholder widening of PM edit rights (R2, CONFIRMED)** | Arrived at 15:09, after the 14:50 freeze | Change `rbac.py` (`project.edit`, `plan.edit`, `allocation.edit`, `project.set_baseline` → PM: ALL), keep `change_request.decide`/`status_update.submit` OWN; require `rebaseline_reason` for planned_end/budget changes by anyone; add editor role to audit; two work-queue sources (PMO: budget/deadline changed in 7 days; assigned PM: another PM edited my project); flip tests (PM edits other PM's project 200; approvals on other PM's project 403); ~20 min |
+| Project **History** tab (audit, readable before → after, paginated, PMO + any PM; Exec/Admin 403) | After the freeze | `GET /projects/{id}/audit` already exists (PMO + own PM); widen access with R2, add a formatter per action, render in a tab; ~20 min |
+| Hours as % of the 40-hour week and the portfolio headcount ("N people across M active projects · X h/week (Y FTE)") | After the freeze | Add `percent = hours / 40` in the people, Team and dashboard views; one summary query counting DISTINCT people on Active projects; ~15 min |
 | Deleting a weekly spend entry | Time; corrections are made by saving the same week and category again (upsert, audited) | Add a soft-delete endpoint and a confirm dialog |
 | Admin queue items for "users with no role" | Cannot occur: `users.role` is NOT NULL with a CHECK | None needed |
 

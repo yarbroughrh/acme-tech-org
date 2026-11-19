@@ -120,6 +120,37 @@ Business-rule status: **CONFIRMED** = by the Head of the PMO · **ASSUMPTION** =
   `scripts/smoke.sh BASE_URL` signs in per role against local or cloud.
 - **Note:** local PG is 18.7 and Aurora is 17.7, so we avoid PG18-only features.
 
+
+### ADR-012 PM Analyst change requests: proposals stored apart from approved data
+- **Context (CONFIRMED by the stakeholder):** PM Analysts propose changes to milestones and tasks; nothing takes
+  effect until the project's PM approves; health and reports use approved data only.
+- **Decision:** a `change_requests` table (project, proposer, entity type/id, `changes` JSON, `base_version`,
+  status PENDING/APPROVED/REJECTED, decided_by, reason, timestamps; a CHECK requires a reason on rejection).
+  Proposals never touch `milestones`/`tasks`, so the health engine cannot see them. Approval runs in ONE
+  transaction: lock the request and the target row → refuse with **409** if the target's `version` differs from
+  `base_version` (or it was deleted) → re-validate with the same `beacon.plan` rules as a direct edit → apply →
+  audit (`UPDATED_BY_APPROVAL` with before/after, plus `APPROVED`) → recalculate health. Only the project's own PM
+  decides (not the PMO). Archiving or cancelling a project rejects its open proposals with a reason.
+- **Routing:** creation lives under the project (`POST /api/projects/{id}/change-requests`, projects service);
+  the queue and decisions are a separate `change-requests` service, because CloudFront routes `/api/<first segment>*`
+  to a Lambda of that name. Shared rules live in `beacon.plan` and `beacon.project_access`.
+- **Alternatives:** draft columns on milestones/tasks (pending values would leak into queries and health); a
+  generic "pending edits" log applied in batch (harder to show per-item diffs and to detect staleness).
+- **Consequences:** a stale proposal must be rejected and re-proposed. This is deliberate: the PM never approves a
+  change against data they haven't seen.
+
+### ADR-013 Health engine pulled forward into Slice 2
+- **Context:** approval must recalculate health, and a stub would make that requirement untestable.
+- **Decision:** the pure engine (`beacon.health`), its store (`beacon.health_store`: batched load, stored
+  current health, a snapshot only when the result changes, lazy refresh when `health_as_of < today`) and its
+  table-driven tests shipped in Slice 2. Slice 3 is reduced to the remaining UI work (trends come later).
+- **Consequences:** derived health columns never bump `projects.version`, so recalculation cannot cause false 409s.
+
+### ADR-014 Versioned, additive seed
+- **Decision:** `seed_runs` records applied seed versions (`v1` base portfolio, `v2` PM Analysts and demo proposals).
+  Each version runs once, in order, in one transaction under an advisory lock, and never deletes data. `v2`
+  upgrades a database seeded before the role change (the legacy `member@` demo account becomes `analyst1@`).
+
 ---
 
 ## Part B: Business rules register (ASSUMPTIONs to confirm)
@@ -130,8 +161,8 @@ Every threshold lives in `health_rules` / `beacon/config.py`, and code comments 
 |---|---|---|---|---|
 | R1 | Admin sees project data read-only | read-only | ASSUMPTION | Admin needs context to support users; no write access |
 | R2 | PM sees all projects, edits own (still open) | all/own | ASSUMPTION | Transparency across the portfolio |
-| R3 | Team member role = people "assigned things by the PM"; sees own assigned tasks only (still open) | own | ASSUMPTION | Least privilege |
-| R4 | Team member and PM can update status of tasks assigned to them | yes | ASSUMPTION | Keeps progress data current at source |
+| R3 | **"Team member" replaced by PM Analyst**: works on assigned projects, proposes changes to milestones and tasks (status, % complete, notes, due dates); nothing applies until the project's PM approves; a rejection needs a reason; health uses approved data only | | **CONFIRMED** | Stakeholder, 2026-11-19 (ADR-012) |
+| R4 | ~~Task status by assignee~~: superseded by R3 (analysts propose; PMs edit directly) | | superseded | |
 | R5 | PM cannot change baseline dates or approved budget | PMO only | ASSUMPTION | Stops goalposts moving |
 | R6 | **Only the Portfolio Manager records actual spend**; PMs get 403 on spend endpoints and no spend editing in the UI | PMO only | **CONFIRMED** | Stakeholder, 2026-11-19 |
 | R7 | PMO edits health thresholds | | ASSUMPTION | Rule owner = PMO |
@@ -148,6 +179,10 @@ Every threshold lives in `health_rules` / `beacon/config.py`, and code comments 
 | A1 | Standard capacity 40 h/week | 40 | ASSUMPTION | |
 | A2 | > 60 h/week rejected (hard limit still open) | 60 | ASSUMPTION | Stakeholder named 60 |
 | A3 | Tasks only assignable to people allocated to the project | | ASSUMPTION | |
+| A4 | The project's PM assigns PM Analysts to their own projects (and the PMO to any) | | ASSUMPTION | Stakeholder left open; default per lead |
+| A5 | Proposals on an archived/cancelled project are auto-rejected with the reason | | ASSUMPTION | Archived projects are read-only |
+| A6 | An Active project with no milestones shows Schedule Amber ("no milestones planned") | | ASSUMPTION | A plan without milestones cannot be shown as on track |
+| A7 | "No update for 7 days" = flag after more than 7 full days (8+), so a weekly cadence on the same weekday is not flagged | | ASSUMPTION | Boundary interpretation of a CONFIRMED rule |
 | S1 | 30-min tokens renewed while active; warn 1 min before expiry | | ASSUMPTION | 30-min expiry itself CONFIRMED |
 | S2 | Lockout 15 min after 5 failed sign-ins | 5 / 15 | ASSUMPTION | |
 | S3 | Reset issues a temporary password; change forced at next sign-in | | ASSUMPTION | |

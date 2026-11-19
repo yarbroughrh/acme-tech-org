@@ -93,6 +93,23 @@ body=$(jq -nc '{email:"smoke@acme.example",display_name:"Smoke",role:"ADMIN"}')
 read -r status _ <<< "$(request POST /api/users "${TOKENS[exec]}" "$body")"
 check "exec cannot create an Admin (privilege escalation)" 403 "$status"
 
+echo "-- change requests (PM Analyst proposals, PM approvals)"
+read -r status json <<< "$(request GET '/api/change-requests?view=approvals&status=PENDING' "${TOKENS[pm]}")"
+check "pm sees approvals waiting" 200 "$status"
+check "seeded proposals are pending for the demo PM" true "$(echo "$json" | jq -r '.total >= 1')"
+read -r status json <<< "$(request GET '/api/change-requests?view=mine' "${TOKENS[analyst]}")"
+check "analyst sees own proposals" 200 "$status"
+read -r status _ <<< "$(request GET /api/change-requests "${TOKENS[exec]}")"
+check "exec cannot read change requests" 403 "$status"
+read -r status json <<< "$(request GET '/api/projects?q=Customer%20Portal%20Rebuild' "${TOKENS[pm]}")"
+cpr=$(echo "$json" | jq -r '.items[0].id')
+check "story project is Red with Status mismatch" "RED STATUS_MISMATCH" "$(echo "$json" | jq -r '.items[0] | "\(.health_overall) \(.flags | join(","))"')"
+read -r status json <<< "$(request GET "/api/projects/$cpr" "${TOKENS[analyst]}")"
+check "assigned analyst can view the project" 200 "$status"
+check "analyst may propose but not edit" "true false" "$(echo "$json" | jq -r '"\(.project.permissions.can_propose) \(.project.permissions.can_edit_plan)"')"
+read -r status _ <<< "$(request POST "/api/projects/$cpr/milestones" "${TOKENS[analyst]}" '{"name":"x","due_date":"2026-12-01","status":"NOT_STARTED"}')"
+check "analyst direct edit is 403" 403 "$status"
+
 echo ""
 echo "Result: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

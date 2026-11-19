@@ -124,6 +124,25 @@ check "pm cannot rebaseline" 403 "$status"
 read -r status _ <<< "$(request GET "/api/projects/00000000-0000-4000-8000-000000000000" "${TOKENS[pm]}")"
 check "unknown project is a JSON 404 (not masked by CloudFront)" 404 "$status"
 
+echo "-- allocations, people, work queue"
+read -r status json <<< "$(request GET "/api/projects/$cpr/allocations" "${TOKENS[pm]}")"
+check "pm reads allocations with load" 200 "$status"
+read -r status json <<< "$(request GET '/api/people?load=SEVERE&page_size=50' "${TOKENS[pmo]}")"
+check "pmo sees severely over-allocated people" 200 "$status"
+check "Marcus Webb is over 60 h" true "$(echo "$json" | jq -r '[.items[] | select(.full_name=="Marcus Webb" and .total_hours > 60)] | length == 1')"
+read -r status _ <<< "$(request GET /api/people "${TOKENS[admin]}")"
+check "admin has no people data" 403 "$status"
+read -r status _ <<< "$(request POST "/api/projects/$cpr/allocations" "${TOKENS[exec]}" '{"person_id":"00000000-0000-4000-8000-000000000000","hours_per_week":8,"start_date":"2026-12-01","end_date":"2026-12-31"}')"
+check "exec cannot allocate" 403 "$status"
+for role in pm pmo exec analyst admin; do
+  read -r status json <<< "$(request GET /api/me/work-queue "${TOKENS[$role]}")"
+  check "$role work queue" 200 "$status"
+done
+read -r status json <<< "$(request GET /api/me/work-queue "${TOKENS[pm]}")"
+check "pm queue has an approval waiting" true "$(echo "$json" | jq -r '[.items[] | select(.type=="APPROVAL_WAITING")] | length > 0')"
+read -r status json <<< "$(request GET /api/me/work-queue "${TOKENS[admin]}")"
+check "admin queue has no project items" true "$(echo "$json" | jq -r '[.items[] | select(.project != null)] | length == 0')"
+
 echo ""
 echo "Result: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

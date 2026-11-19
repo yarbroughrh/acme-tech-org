@@ -25,6 +25,7 @@ import StatusUpdatesTab from './project/StatusUpdatesTab'
 import AnalystsTab from './project/AnalystsTab'
 import AuditTab from './project/AuditTab'
 import TeamTab from './project/TeamTab'
+import BudgetTab from './project/BudgetTab'
 
 /** Cancel dialog with an optional reason. */
 function CancelProjectDialog({ open, busy, onCancel, onConfirm }) {
@@ -126,6 +127,7 @@ export default function ProjectDetailPage() {
     { value: 'plan', label: 'Milestones & tasks' },
     { value: 'status', label: 'Status updates' },
     { value: 'team', label: 'Team' },
+    { value: 'budget', label: 'Budget' },
     ...(permissions.can_assign_analysts || analystCount > 0 ? [{ value: 'analysts', label: 'Analysts' }] : []),
     ...(permissions.can_view_audit ? [{ value: 'audit', label: 'Audit' }] : []),
   ]
@@ -173,6 +175,7 @@ export default function ProjectDetailPage() {
         {activeTab === 'plan' && <PlanTab project={project} onChanged={reload} />}
         {activeTab === 'status' && <StatusUpdatesTab project={project} onChanged={reload} />}
         {activeTab === 'team' && <TeamTab project={project} />}
+        {activeTab === 'budget' && <BudgetTab project={project} onChanged={reload} />}
         {activeTab === 'analysts' && <AnalystsTab project={project} lookups={lookups} />}
         {activeTab === 'audit' && <AuditTab project={project} />}
       </Box>

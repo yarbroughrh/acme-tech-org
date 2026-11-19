@@ -151,6 +151,14 @@ check "budget table has a variance %" true "$(echo "$json" | jq -r '.totals.vari
 read -r status _ <<< "$(request GET /api/portfolio/summary "${TOKENS[admin]}")"
 check "admin has no dashboard" 403 "$status"
 
+echo "-- weekly spend"
+monday=$(date -d "last monday -7 days" +%F)
+read -r status _ <<< "$(request POST "/api/projects/$cpr/spend" "${TOKENS[pm]}" "{\"week_starting\":\"$monday\",\"category\":\"LABOUR\",\"amount\":1}")"
+check "pm cannot record spend" 403 "$status"
+read -r status json <<< "$(request GET "/api/projects/$cpr/spend" "${TOKENS[pmo]}")"
+check "pmo reads weekly spend" 200 "$status"
+check "all spend weeks start on a Monday" true "$(echo "$json" | jq -r '[.items[].week_starting | strptime("%Y-%m-%d") | mktime | strftime("%u")] | all(. == "1")')"
+
 echo ""
 echo "Result: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

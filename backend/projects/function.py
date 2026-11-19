@@ -13,6 +13,7 @@ registered before ``/{id}``. Creates honour ``Idempotency-Key``; updates require
     GET|POST /{id}/milestones   PUT|DELETE /{id}/milestones/{milestone_id}
     GET|POST /{id}/tasks        PUT|DELETE /{id}/tasks/{task_id}
     GET|POST /{id}/allocations  PUT|DELETE /{id}/allocations/{allocation_id}   (warnings, no hard block)
+    GET|POST /{id}/spend                       weekly spend (PMO records; upsert on week + category)
     GET|POST /{id}/status-updates
     GET|POST /{id}/analysts     DELETE /{id}/analysts/{user_id}
     POST /{id}/change-requests                  PM Analyst proposal
@@ -22,6 +23,7 @@ import allocations_service
 import collaboration_service as collab
 import plan_service
 import projects_service
+import spend_service
 from beacon import idempotency, logs
 from beacon.http import Request, Router
 
@@ -153,6 +155,18 @@ def update_allocation(req: Request, conn) -> tuple:
 def remove_allocation(req: Request, conn) -> tuple:
     """Archive an allocation."""
     return allocations_service.remove_allocation(conn, req.user, req.params["id"], req.params["allocation_id"])
+
+
+@router.route("GET", "/{id}/spend")
+def list_spend(req: Request, conn) -> tuple:
+    """Weekly spend entries and totals."""
+    return spend_service.list_spend(conn, req.user, req.params["id"])
+
+
+@router.route("POST", "/{id}/spend")
+def save_spend(req: Request, conn) -> tuple:
+    """Record or update weekly spend (PMO only; upsert on week + category)."""
+    return idempotency.run(conn, req, lambda: spend_service.save_spend(conn, req.user, req.params["id"], req.json()))
 
 
 @router.route("GET", "/{id}/status-updates")

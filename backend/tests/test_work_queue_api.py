@@ -6,8 +6,10 @@ import pytest
 @pytest.fixture(autouse=True, scope="module")
 def _only_seeded_projects(database):
     """Other test modules create sandbox projects for the demo PM; archive them so queues reflect the seed story."""
-    database.execute("UPDATE projects SET archived_at = now() WHERE archived_at IS NULL AND "
-                     "(name LIKE 'CR Sandbox %%' OR name LIKE 'Write Test %%')")
+    seeded = "(SELECT max(applied_at) FROM seed_runs)"
+    database.execute(f"UPDATE projects SET archived_at = now() WHERE archived_at IS NULL AND created_at > {seeded}")
+    database.execute(f"UPDATE allocations SET archived_at = now() WHERE archived_at IS NULL AND person_id IN "
+                     f"(SELECT id FROM people WHERE created_at > {seeded})")
 
 
 def _queue(api, key):

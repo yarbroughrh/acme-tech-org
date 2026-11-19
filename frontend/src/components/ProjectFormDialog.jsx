@@ -2,7 +2,7 @@ import { useState } from 'react'
 import PropTypes from 'prop-types'
 import {
   Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, FormHelperText, InputLabel,
-  MenuItem, Select, Stack, TextField, useMediaQuery,
+  MenuItem, Select, Stack, TextField, Tooltip, useMediaQuery,
 } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 import { createProject, updateProject } from '../api/projects'
@@ -13,6 +13,9 @@ import { validateProject } from '../utils/validation'
 
 const BASELINE_FIELDS = ['planned_start', 'planned_end', 'approved_budget', 'pm_user_id']
 export const BASELINE_HELP = 'Only the Portfolio Manager can change baselines'
+export const LIFECYCLE_HELP = 'Only the Portfolio Manager can change lifecycle status'
+/** Changing any of these is a rebaseline: the PMO must give a reason (lead decision). */
+const REBASELINE_FIELDS = ['planned_start', 'planned_end', 'approved_budget']
 
 /** Form values from a project (edit) or defaults (create). */
 function initialValues(project) {
@@ -69,7 +72,9 @@ SelectField.propTypes = {
  * double-click or retry cannot create a duplicate. In edit mode, baseline fields are disabled unless
  * the caller may change baselines, and only changed fields are sent with the current version.
  */
-export default function ProjectFormDialog({ open, mode, project, canEditBaseline = true, lookups, onClose, onSaved }) {
+export default function ProjectFormDialog({
+  open, mode, project, canEditBaseline = true, canChangeLifecycle = true, lookups, onClose, onSaved,
+}) {
   const theme = useTheme()
   const fullScreen = useMediaQuery(theme.breakpoints.down('sm'))
   const [values, setValues] = useState(() => initialValues(project))
@@ -79,6 +84,11 @@ export default function ProjectFormDialog({ open, mode, project, canEditBaseline
   const [saving, setSaving] = useState(false)
   const [idempotencyKey] = useState(() => newIdempotencyKey())
   const baselineLocked = mode === 'edit' && !canEditBaseline
+  const lifecycleLocked = mode === 'edit' && !canChangeLifecycle
+  const [reason, setReason] = useState('')
+  const original = initialValues(project)
+  const isRebaseline = mode === 'edit' && !baselineLocked
+    && REBASELINE_FIELDS.some((f) => String(values[f] ?? '') !== String(original[f] ?? ''))
 
   const set = (field) => (value) => setValues((v) => ({ ...v, [field]: value }))
   const text = (field) => (e) => set(field)(e.target.value)
@@ -86,6 +96,7 @@ export default function ProjectFormDialog({ open, mode, project, canEditBaseline
   const handleSubmit = async (event) => {
     event.preventDefault()
     const found = validateProject(values)
+    if (isRebaseline && !reason.trim()) found.rebaseline_reason = 'Explain why the baseline is changing.'
     setErrors(found)
     setServerError('')
     if (Object.keys(found).length) return
@@ -97,8 +108,11 @@ export default function ProjectFormDialog({ open, mode, project, canEditBaseline
       } else {
         const changes = changedFields(toPayload(values), toPayload(initialValues(project)))
         BASELINE_FIELDS.forEach((f) => { if (baselineLocked) delete changes[f] })
+        if (lifecycleLocked) delete changes.lifecycle_status
         if (!Object.keys(changes).length) { onClose(); return }
-        result = await updateProject(project.id, { ...changes, version: project.version })
+        const body = { ...changes, version: project.version }
+        if (isRebaseline) body.rebaseline_reason = reason.trim()
+        result = await updateProject(project.id, body)
       }
       onSaved(result.project)
     } catch (err) {
@@ -163,17 +177,30 @@ export default function ProjectFormDialog({ open, mode, project, canEditBaseline
                 helperText={errors.approved_budget || baselineHelp} disabled={saving || baselineLocked} fullWidth
                 slotProps={{ htmlInput: { min: 0, step: 1000 } }}
               />
-              <SelectField
-                id="project-lifecycle" label="Lifecycle status" required value={values.lifecycle_status} onChange={set('lifecycle_status')}
-                options={Object.entries(LIFECYCLE_LABELS).map(([value, label]) => ({ value, label }))}
-                error={errors.lifecycle_status} disabled={saving}
-              />
+              <Tooltip title={lifecycleLocked ? LIFECYCLE_HELP : ''} placement="top">
+                <span style={{ width: '100%' }}>
+                  <SelectField
+                    id="project-lifecycle" label="Lifecycle status" required value={values.lifecycle_status} onChange={set('lifecycle_status')}
+                    options={Object.entries(LIFECYCLE_LABELS).map(([value, label]) => ({ value, label }))}
+                    error={errors.lifecycle_status} disabled={saving || lifecycleLocked}
+                    helperText={lifecycleLocked ? LIFECYCLE_HELP : undefined}
+                  />
+                </span>
+              </Tooltip>
               <SelectField
                 id="project-priority" label="Priority" value={values.priority} onChange={set('priority')}
                 options={Object.entries(PRIORITY_LABELS).map(([value, label]) => ({ value, label }))}
                 error={errors.priority} disabled={saving}
               />
             </Stack>
+            {isRebaseline && (
+              <TextField
+                id="project-rebaseline-reason" label="Reason for rebaselining" required value={reason}
+                onChange={(e) => setReason(e.target.value)} error={Boolean(errors.rebaseline_reason)}
+                helperText={errors.rebaseline_reason || 'Changing planned dates or the approved budget is a rebaseline. The original baseline is kept and the change is audited.'}
+                disabled={saving} fullWidth multiline minRows={2} slotProps={{ htmlInput: { maxLength: 1000 } }}
+              />
+            )}
             <TextField
               id="project-sponsor" label="Sponsor" value={values.sponsor} onChange={text('sponsor')}
               error={Boolean(errors.sponsor)} helperText={errors.sponsor} disabled={saving} fullWidth
@@ -200,6 +227,7 @@ ProjectFormDialog.propTypes = {
   mode: PropTypes.oneOf(['create', 'edit']).isRequired,
   project: PropTypes.object,
   canEditBaseline: PropTypes.bool,
+  canChangeLifecycle: PropTypes.bool,
   lookups: PropTypes.shape({ departments: PropTypes.array, project_managers: PropTypes.array }),
   onClose: PropTypes.func.isRequired,
   onSaved: PropTypes.func.isRequired,

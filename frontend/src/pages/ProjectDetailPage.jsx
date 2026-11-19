@@ -179,7 +179,8 @@ export default function ProjectDetailPage() {
 
       {dialog === 'edit' && (
         <ProjectFormDialog
-          open mode="edit" project={project} canEditBaseline={Boolean(permissions.can_edit_baseline)} lookups={lookups}
+          open mode="edit" project={project} canEditBaseline={Boolean(permissions.can_edit_baseline)}
+          canChangeLifecycle={Boolean(permissions.can_change_lifecycle)} lookups={lookups}
           onClose={() => setDialog(null)}
           onSaved={() => { setDialog(null); notify('Project updated'); reload() }}
         />

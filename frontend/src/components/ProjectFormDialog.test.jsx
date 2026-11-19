@@ -115,4 +115,42 @@ describe('ProjectFormDialog', () => {
     await user.click(within(alert).getByRole('button', { name: 'Reload' }))
     expect(onClose).toHaveBeenCalled()
   })
+
+  it('disables lifecycle for a PM with an explanation and never sends it', async () => {
+    projectsApi.updateProject.mockResolvedValue({ project: existing })
+    const user = userEvent.setup()
+    renderWithProviders(<ProjectFormDialog open mode="edit" project={existing} canEditBaseline={false} canChangeLifecycle={false} lookups={lookups} onClose={vi.fn()} onSaved={vi.fn()} />, { user: USERS.PM })
+    expect(screen.getByRole('combobox', { name: 'Lifecycle status' })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByText('Only the Portfolio Manager can change lifecycle status')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText(/Actual start/), { target: { value: '2026-01-12' } })
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(projectsApi.updateProject).toHaveBeenCalledWith('p1', { actual_start: '2026-01-12', version: 4 })
+  })
+
+  it('lets the Portfolio Manager change lifecycle status', async () => {
+    projectsApi.updateProject.mockResolvedValue({ project: existing })
+    const user = userEvent.setup()
+    renderWithProviders(<ProjectFormDialog open mode="edit" project={existing} canEditBaseline canChangeLifecycle lookups={lookups} onClose={vi.fn()} onSaved={vi.fn()} />, { user: USERS.PMO })
+    await choose(user, 'Lifecycle status', 'On hold')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(projectsApi.updateProject).toHaveBeenCalledWith('p1', { lifecycle_status: 'ON_HOLD', version: 4 })
+    expect(screen.queryByLabelText(/Reason for rebaselining/)).not.toBeInTheDocument()  // not a rebaseline
+  })
+
+  it('requires a reason when the Portfolio Manager rebaselines, and sends it', async () => {
+    projectsApi.updateProject.mockResolvedValue({ project: existing })
+    const user = userEvent.setup()
+    renderWithProviders(<ProjectFormDialog open mode="edit" project={existing} canEditBaseline canChangeLifecycle lookups={lookups} onClose={vi.fn()} onSaved={vi.fn()} />, { user: USERS.PMO })
+    expect(screen.queryByLabelText(/Reason for rebaselining/)).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText(/Planned end/), { target: { value: '2027-02-26' } })
+    const reasonBox = screen.getByLabelText(/Reason for rebaselining/)
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(screen.getByText('Explain why the baseline is changing.')).toBeInTheDocument()
+    expect(projectsApi.updateProject).not.toHaveBeenCalled()
+    await user.type(reasonBox, 'Vendor delay agreed at steering')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(projectsApi.updateProject).toHaveBeenCalledWith('p1', {
+      planned_end: '2027-02-26', rebaseline_reason: 'Vendor delay agreed at steering', version: 4,
+    })
+  })
 })

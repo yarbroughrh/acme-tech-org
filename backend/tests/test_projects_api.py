@@ -123,3 +123,37 @@ def test_departments_are_the_business_departments(api):
     assert sorted(d["name"] for d in body["departments"]) == sorted([
         "Finance", "Human Resources", "Operations", "Sales", "Marketing", "Legal and Compliance",
         "Customer Service", "Supply Chain"])
+
+
+def test_default_sort_is_needs_attention(api, database):
+    """Red before Amber before Green before non-Active; flagged before plain within a colour; then priority, budget."""
+    _, body = api.call("GET", "/api/projects", token=api.token("pmo"), query={"page_size": "100"})
+    _, page2 = api.call("GET", "/api/projects", token=api.token("pmo"), query={"page_size": "100", "page": "2"})
+    rows = body["items"] + page2["items"]
+    rank = {"RED": 0, "AMBER": 1, "GREEN": 2, None: 3}
+    flagged = lambda p: 0 if set(p["flags"]) & {"STATUS_MISMATCH", "UPDATE_OVERDUE"} else 1  # noqa: E731
+    prio = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
+    keys = [(rank[p["health_overall"]], flagged(p), prio[p["priority"]], -p["approved_budget"]) for p in rows]
+    assert keys == sorted(keys)  # whole list in "needs attention" order across pages
+    assert rows[0]["health_overall"] == "RED"
+    reds = [p for p in rows if p["health_overall"] == "RED"]
+    first_plain = next(i for i, p in enumerate(reds) if not flagged(p) == 0)
+    assert all(flagged(p) == 0 for p in reds[:first_plain])  # Red with mismatch before plain Red
+    explicit = api.call("GET", "/api/projects", token=api.token("pmo"), query={"page_size": "100", "sort": "attention"})[1]
+    assert [p["id"] for p in explicit["items"]] == [p["id"] for p in body["items"]]
+
+
+def test_attention_sort_high_priority_before_low_within_same_health(api, database):
+    """Two otherwise identical Green, unflagged projects: High priority comes before Low."""
+    pmo = api.token("pmo")
+    _, lk = api.call("GET", "/api/projects/lookups", token=pmo)
+    ids = {}
+    for prio in ("LOW", "HIGH"):
+        _, created = api.call("POST", "/api/projects", {
+            "name": f"Sort {prio} {uuid.uuid4().hex[:6]}", "department_id": lk["departments"][0]["id"],
+            "pm_user_id": lk["project_managers"][0]["id"], "planned_start": "2030-01-01", "planned_end": "2030-06-01",
+            "approved_budget": 1000, "lifecycle_status": "PROPOSED", "priority": prio}, token=pmo)
+        ids[prio] = created["project"]["id"]
+    _, body = api.call("GET", "/api/projects", token=pmo, query={"q": "Sort ", "page_size": "100"})
+    order = [p["id"] for p in body["items"]]
+    assert order.index(ids["HIGH"]) < order.index(ids["LOW"])

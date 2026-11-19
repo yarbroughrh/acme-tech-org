@@ -50,7 +50,7 @@ def _multi(query: dict[str, str], name: str, allowed: tuple[str, ...] | None, er
 def list_projects(conn: Connection, principal: Principal, query: dict[str, str]) -> tuple[int, dict]:
     """Server-side search, filter, sort and pagination over the portfolio."""
     rbac.require(principal, "project.read")  # analysts (OWN) are limited to assigned projects below
-    limit, offset, order_by = page_params(query, repo.SORTS, "name")
+    limit, offset, order_by = page_params(query, repo.SORTS, "attention")
     errors: list = []
     mine = query.get("mine") == "true"
     filters = {

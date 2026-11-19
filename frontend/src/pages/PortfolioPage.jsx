@@ -24,7 +24,9 @@ import useApiQuery from '../utils/useApiQuery'
 
 export const PAGE_SIZE = 20
 const FILTER_KEYS = ['department_id', 'lifecycle_status', 'priority', 'pm_user_id']
+export const DEFAULT_SORT = 'attention'
 const SORT_OPTIONS = [
+  { value: 'attention', label: 'Needs attention' },
   { value: 'name', label: 'Name (A–Z)' },
   { value: '-name', label: 'Name (Z–A)' },
   { value: 'planned_end', label: 'End date (earliest)' },
@@ -37,9 +39,12 @@ const SORT_OPTIONS = [
 function FilterSelect({ id, label, value, onChange, options }) {
   return (
     <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 170 } }}>
-      <InputLabel id={`${id}-label`}>{label}</InputLabel>
-      <Select labelId={`${id}-label`} id={id} label={label} value={value} onChange={(e) => onChange(e.target.value)}>
-        <MenuItem value=""><em>All</em></MenuItem>
+      <InputLabel id={`${id}-label`} shrink>{label}</InputLabel>
+      <Select
+        labelId={`${id}-label`} id={id} label={label} value={value} displayEmpty notched
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <MenuItem value="">All</MenuItem>
         {options.map((o) => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
       </Select>
     </FormControl>
@@ -100,7 +105,14 @@ export default function PortfolioPage() {
   const [lookups, setLookups] = useState({ departments: [], project_managers: [] })
 
   const page = Math.max(1, Number(params.get('page')) || 1)
-  const sort = params.get('sort') || 'name'
+  const sort = params.get('sort') || DEFAULT_SORT
+  const hasFilters = ['q', 'health', 'mine', ...FILTER_KEYS].some((key) => params.get(key))
+
+  /** Clear search, every filter and "Mine"; keep the chosen sort. */
+  const clearFilters = () => {
+    setSearchText('')
+    updateParams(Object.fromEntries(['q', 'health', 'mine', ...FILTER_KEYS].map((key) => [key, ''])))
+  }
   const query = params.toString()
 
   /** Update URL params; any change other than paging returns to page 1. */
@@ -239,6 +251,9 @@ export default function PortfolioPage() {
               {SORT_OPTIONS.map((o) => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
             </Select>
           </FormControl>
+          {hasFilters && (
+            <Button variant="text" onClick={clearFilters} sx={{ alignSelf: { sm: 'center' } }}>Clear filters</Button>
+          )}
         </Stack>
       </Paper>
       <Paper sx={{ p: { xs: 1.5, md: 0 } }} aria-busy={state.loading}>

@@ -20,9 +20,9 @@ def test_seed_rerun_is_skipped_and_never_duplicates(database):
     before = database.execute("SELECT count(*) AS n FROM projects").fetchone()["n"]
     assert seed.run_seed(database)["status"] == "skipped"  # every seed version already applied
     assert database.execute("SELECT count(*) AS n FROM projects").fetchone()["n"] == before
-    seeded = database.execute("SELECT count(*) AS n FROM projects WHERE created_by = "
-                              "(SELECT id FROM users WHERE email = 'pmo@acme.example') AND name NOT LIKE '%% Test %%' "
-                              "AND name NOT LIKE 'CR Sandbox %%'").fetchone()["n"]
+    # seeded projects = those created in the seed v1 transaction (other tests add their own projects)
+    seeded = database.execute("SELECT count(*) AS n FROM projects WHERE created_at <= "
+                              "(SELECT applied_at FROM seed_runs WHERE version = 'v1')").fetchone()["n"]
     assert seeded == 120
 
 

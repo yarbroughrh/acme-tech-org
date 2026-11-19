@@ -60,7 +60,47 @@ describe('PortfolioPage', () => {
     expect(within(table).getByText('$1,250,000')).toBeInTheDocument()
     expect(within(table).getByText('Amber')).toBeInTheDocument()
     expect(screen.getByText('1 project')).toBeInTheDocument()
-    expect(lastRequest()).toMatchObject({ page: 1, page_size: 20, sort: 'name' })
+    expect(lastRequest()).toMatchObject({ page: 1, page_size: 20, sort: 'attention' })
+  })
+
+  it('defaults to "Needs attention" sort, listed first, with Name still available', async () => {
+    projectsApi.listProjects.mockResolvedValue({ items: [project()], page: 1, page_size: 20, total: 1 })
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByRole('link', { name: 'Payments Gateway Upgrade' })
+    const sortBox = screen.getByRole('combobox', { name: 'Sort by' })
+    expect(sortBox).toHaveTextContent('Needs attention')
+    await user.click(sortBox)
+    const options = await screen.findAllByRole('option')
+    expect(options[0]).toHaveTextContent('Needs attention')
+    await user.click(screen.getByRole('option', { name: 'Name (A–Z)' }))
+    await waitFor(() => expect(lastRequest()).toMatchObject({ sort: 'name', page: 1 }))
+  })
+
+  it('shows "All" for every empty filter and sends no filters by default', async () => {
+    projectsApi.listProjects.mockResolvedValue({ items: [project()], page: 1, page_size: 20, total: 1 })
+    renderPage()
+    await screen.findByRole('link', { name: 'Payments Gateway Upgrade' })
+    for (const name of ['Department', 'Status', 'Priority', 'Project manager']) {
+      expect(screen.getByRole('combobox', { name })).toHaveTextContent('All')
+    }
+    const request = lastRequest()
+    ;['department_id', 'lifecycle_status', 'priority', 'pm_user_id', 'health', 'q'].forEach((key) => expect(request).not.toHaveProperty(key))
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument()
+  })
+
+  it('clears a single filter via "All" and all filters via "Clear filters"', async () => {
+    projectsApi.listProjects.mockResolvedValue({ items: [project()], page: 1, page_size: 20, total: 1 })
+    const user = userEvent.setup()
+    renderPage('/portfolio?priority=HIGH&health=RED&sort=name')
+    await screen.findByRole('link', { name: 'Payments Gateway Upgrade' })
+    await user.click(screen.getByRole('combobox', { name: 'Priority' }))
+    await user.click(await screen.findByRole('option', { name: 'All' }))
+    await waitFor(() => expect(lastRequest()).not.toHaveProperty('priority'))
+    expect(lastRequest()).toMatchObject({ health: 'RED' })
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }))
+    await waitFor(() => expect(lastRequest()).not.toHaveProperty('health'))
+    expect(lastRequest()).toMatchObject({ sort: 'name' })  // the chosen sort is kept
   })
 
   it('sends the search text as the q parameter (debounced)', async () => {

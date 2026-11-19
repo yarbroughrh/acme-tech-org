@@ -6,7 +6,15 @@ from psycopg import Connection
 
 from beacon.db import execute, fetch_all, fetch_one
 
+# "Needs attention" (default): Red, Amber, Green, then non-Active (no health); within each, projects with a
+# Status mismatch or Update overdue flag first; then priority High > Medium > Low; then larger budget.
+# Expressed as ONE row value so the appended ASC/DESC applies to the whole ordering.
+ATTENTION_ORDER = ("ROW(CASE p.health_overall WHEN 'RED' THEN 0 WHEN 'AMBER' THEN 1 WHEN 'GREEN' THEN 2 ELSE 3 END, "
+                   "CASE WHEN p.health_flags && ARRAY['STATUS_MISMATCH', 'UPDATE_OVERDUE']::text[] THEN 0 ELSE 1 END, "
+                   "CASE p.priority WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 ELSE 2 END, -p.approved_budget)")
+
 SORTS = {
+    "attention": ATTENTION_ORDER,
     "name": "lower(p.name)",
     "planned_end": "p.planned_end",
     "approved_budget": "p.approved_budget",

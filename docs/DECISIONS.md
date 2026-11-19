@@ -9,13 +9,14 @@ Business-rule status: **CONFIRMED** = by the Head of the PMO · **ASSUMPTION** =
 
 ## Part A: ADRs
 
-### ADR-001 Service decomposition: five domain Lambdas, nested resources under their parent
+### ADR-001 Service decomposition: domain Lambdas, nested resources under their parent
 - **Context:** Terraform creates one Lambda per `backend/<folder>` and a CloudFront route `/api/<folder>*` (prefix
   match). Nested paths such as `/api/projects/{id}/milestones` reach the `projects` Lambda. Every service adds a cold
   start, and the first request after Aurora's auto-pause took 15.8 s.
-- **Decision:** five services by domain: `auth`, `users`, `projects` (incl. milestones, tasks, allocations,
-  spend, status updates, health, project audit), `people`, `portfolio` (dashboard, attention queue, global audit,
-  health rules, lookups).
+- **Decision:** services by domain: `auth`, `users` (incl. the Admin access audit), `projects` (incl. milestones,
+  tasks, allocations, status updates, analysts, change-request proposals, project audit, lookups), `change-requests`
+  (approval queue and decisions), `people` (people view), `portfolio` (executive dashboard summary) and `me`
+  (the signed-in user's "Your next actions"). A service's name is the first URL segment (CloudFront routing).
 - **Alternatives:** one Lambda per resource (≈10 cold starts, more sharing friction); one monolithic Lambda
   (simplest, but ignores the workshop's service model and makes RBAC and ownership less legible per domain).
 - **Consequences:** most traffic hits `projects`. The router must normalise the cloud path (`/api/projects/1/x`)
@@ -67,8 +68,8 @@ Business-rule status: **CONFIRMED** = by the Head of the PMO · **ASSUMPTION** =
 - **Consequences:** sign-in takes about 4 s at 128 MB.
 - **Follow-up (approved by the lead; diff shown before applying):** raise memory for the **auth Lambda only** to
   1769 MB (one full vCPU). Reason: Lambda allocates CPU in proportion to memory, so this cuts sign-in to well under
-  a second **while keeping strong password hashing** (600k iterations) rather than weakening it. **Status: diff
-  prepared, NOT yet applied; waiting for the lead to review it.** The change is a
+  a second **while keeping strong password hashing** (600k iterations) rather than weakening it. **Status: applied
+  and deployed after the lead approved the diff (commit 62071fb); sign-in dropped from ~4.5 s to ~0.4 s.** The change is a
   `lambda_memory_overrides = { auth = 1769 }` map in `infra/locals.tf` and `memory_size = try(each.value.memory_size, 128)`
   in `infra/lambda.tf`; every other function stays at 128 MB. Password hashing in the `users` service
   (create/reset, Admin-only and rare) and the seed stay at 128 MB.
@@ -153,43 +154,94 @@ Business-rule status: **CONFIRMED** = by the Head of the PMO · **ASSUMPTION** =
 
 ---
 
-## Part B: Business rules register (ASSUMPTIONs to confirm)
+### ADR-015 "Your next actions": `me` service, aggregate queries, pure ranking
+- **Context:** the lead specified `GET /me/work-queue` and asked for it in the reports/portfolio service. CloudFront
+  routes `/api/<first segment>*` to the Lambda of that name, so the URL and the service placement conflict.
+- **Decision:** keep the specified URL and serve it from a small `me` service (the caller's own views). Items are
+  built per role from a few aggregate queries (no N+1), scoped by the RBAC map and ownership rules; health colours
+  and flags are read from the stored health-engine result, and milestone lateness uses the engine's own
+  `milestone_states`, so no rule is re-implemented. Max 50 items plus counts by severity.
+- **Ranking rule (lead's specification), `rank_work_items(items, today)`, pure and table-tested:** base score
+  critical 100, high 60, due_soon 30; +1 per day overdue or waiting, capped at 30; +15 High-priority project,
+  +5 Medium; ties: larger approved budget, then earlier due date. Property noted in tests: severities overlap once
+  days and priority are added (a 30-day-old High-priority due_soon item scores 75 > a fresh high item's 60).
+- **Interpretations (ASSUMPTION):** "update 14+ days overdue" = no update for 14+ days; "milestone 14+ days late"
+  is critical at 14 (the health rule's Red is > 14); "users with no role" cannot exist (role is NOT NULL + CHECK),
+  so that Admin item is never produced; "New" = event newer than the user's previous sign-in.
 
-Every threshold lives in `health_rules` / `beacon/config.py`, and code comments mark each one `ASSUMPTION`.
+### ADR-016 Deploying a single change in isolation
+- **Context:** before a demo the lead asked for one small change (portfolio sort) while `main` already held an
+  undeployed feature.
+- **Decision:** deploy from a temporary git worktree at the last deployed commit plus a cherry-pick of the change,
+  using the unchanged workshop scripts; the identical commit stays on `main`. Verified in the Terraform plan that
+  only function code changed.
 
-| # | Rule | Value | Status | Rationale |
+---
+
+## Part B: Business rules register
+
+Status: **CONFIRMED** = Head of the PMO · **LEAD DECISION (ASSUMPTION)** = the lead's decision, recorded with its
+rationale, pending stakeholder confirmation · **ASSUMPTION** = engineering default.
+
+| # | Rule | Value | Status | Rationale / source |
 |---|---|---|---|---|
-| R1 | Admin sees project data read-only | read-only | ASSUMPTION | Admin needs context to support users; no write access |
-| R2 | PM sees all projects, edits own (still open) | all/own | ASSUMPTION | Transparency across the portfolio |
-| R3 | **"Team member" replaced by PM Analyst**: works on assigned projects, proposes changes to milestones and tasks (status, % complete, notes, due dates); nothing applies until the project's PM approves; a rejection needs a reason; health uses approved data only | | **CONFIRMED** | Stakeholder, 2026-11-19 (ADR-012) |
-| R4 | ~~Task status by assignee~~: superseded by R3 (analysts propose; PMs edit directly) | | superseded | |
-| R5 | PM cannot change baseline dates or approved budget | PMO only | ASSUMPTION | Stops goalposts moving |
-| R6 | **Only the Portfolio Manager records actual spend**; PMs get 403 on spend endpoints and no spend editing in the UI | PMO only | **CONFIRMED** | Stakeholder, 2026-11-19 |
+| R1 | Admin = users and access only; **403 on all project, people, spend and report endpoints**; sees user management and an access audit (user/access changes only) | | LEAD DECISION (ASSUMPTION) | Least privilege: "Admin is user control, not project control" |
+| R2 | PMs view all projects read-only and edit only their own | | LEAD DECISION (ASSUMPTION) | People are shared across projects, so PMs need to see clashes |
+| R8 | Executives see the whole portfolio read-only, with a department filter | | LEAD DECISION (ASSUMPTION) | The steering committee governs the whole portfolio |
+| R3 | **PM Analyst** replaces Team member: works on assigned projects, proposes changes to milestones/tasks (status, % complete, notes, due dates); nothing applies until the project's PM approves; rejection needs a reason; health uses approved data only | | **CONFIRMED** | ADR-012 |
+| A4 | A PM assigns analysts to their own projects; the PMO to any project; an analyst can be on several projects (`project_analysts`) | | LEAD DECISION (ASSUMPTION) | |
+| R9 | Only the PMO changes lifecycle status (Proposed, Active, On hold, Closed, Cancelled); the PM records the actual start date on their own projects | | LEAD DECISION (ASSUMPTION) | |
+| R5 | Only the PMO rebaselines planned dates or approved budget, **with a reason**; original baseline kept; history recorded and audited; health uses the current baseline | | LEAD DECISION (ASSUMPTION) | Stops goalposts moving |
+| R6 | **Only the PMO records actual spend**; PMs get 403 | | **CONFIRMED** | |
+| SP1 | **Spend is recorded weekly**: week starting (a Monday; other days rejected), amount > 0, category (Labour, Contractors and vendors, Software and licences, Hardware and infrastructure, Other), optional note; one entry per project/week/category (a second save updates it, audited); actual to date = sum of weekly entries up to the current week | | **CONFIRMED** | Supersedes the lead's monthly decision |
+| SP2 | PMO work queue: Active project with no spend for the previous week = High; 2+ weeks = Critical | 1 / 2 weeks | **CONFIRMED** | |
 | R7 | PMO edits health thresholds | | ASSUMPTION | Rule owner = PMO |
-| H1 | Health only for Active projects | | ASSUMPTION | Others show lifecycle status |
-| H2 | Schedule Amber: lag > 10 pts, or late start > 7 days (exact thresholds still open) | 10 / 7 | ASSUMPTION | |
-| H3 | Schedule Red: lag > 25 pts, or past planned end and not complete | 25 | ASSUMPTION | |
-| H4 | Budget Amber: actual > planned-to-date by > 10%, or %spent − progress% > 15 pts | 10% / 15 | ASSUMPTION | |
-| H5 | Budget Red: actual > planned-to-date by > 20%, or > approved budget | 20% | ASSUMPTION | |
-| H6 | Milestone at risk: due within 7 days and < 75% complete | 7 / 75% | ASSUMPTION | |
-| H7 | Milestones Amber: any at risk or 1 late; Red: ≥ 2 late or any > 14 days late | 2 / 14 | ASSUMPTION | |
-| H8 | **Overall = worst of schedule, budget and milestones** | | **CONFIRMED** | Stakeholder, 2026-11-19 |
-| H9 | Mismatch flag when PM-reported status is better than calculated | | ASSUMPTION | |
-| H10 | **PMs update at least weekly; no status update in 7 days raises "Update overdue"** (colour unchanged) | 7 | **CONFIRMED** | Stakeholder, 2026-11-19; `health_rules.confirmed = true` (migration 0003) |
-| A1 | Standard capacity 40 h/week | 40 | ASSUMPTION | |
-| A2 | > 60 h/week rejected (hard limit still open) | 60 | ASSUMPTION | Stakeholder named 60 |
+| H1 | Health colours for Active projects only; others show lifecycle status and are excluded from dashboard health counts | | **CONFIRMED** | |
+| H2 | Schedule Amber: progress trails elapsed by > 10 pts | 10 | **CONFIRMED** | |
+| H2b | Schedule Amber: actual start > 7 days after planned start | 7 | ASSUMPTION | Not in the confirmed list |
+| H3 | Schedule Red: > 25 pts behind, or past planned end and not complete | 25 | **CONFIRMED** | |
+| H4 | Budget Amber: actual > planned to date by > 10% | 10% | **CONFIRMED** | |
+| H4b | Budget Amber: % of budget spent exceeds progress % by > 15 pts (spending ahead of delivery) | 15 | ASSUMPTION | Not in the confirmed list |
+| H5 | Budget Red: > 20% over planned to date, or over the approved budget | 20% | **CONFIRMED** | |
+| H6 | Milestone at risk: due within 7 days and < 75% complete | 7 / 75% | **CONFIRMED** | |
+| H7 | Milestones Amber: any at risk or one late; Red: 2+ late or any > 14 days late | 1 / 2 / 14 | **CONFIRMED** | |
+| H8 | Overall = worst of schedule, budget and milestones | | **CONFIRMED** | |
+| H9 | Status mismatch when the PM's reported status is better than calculated; shown on the project and in the PMO's queue | | **CONFIRMED** | |
+| H10 | PMs update at least weekly; > 7 days without an update raises "Update overdue" (colour unchanged) | 7 | **CONFIRMED** | |
+| A1 | Standard capacity 40 h/week; above it Amber "Over-allocated" | 40 | **CONFIRMED** | |
+| A2 | No hard block: above 60 h/week saved with a Red "Severely over-allocated" warning and listed in Needs attention; input check 0.5–168 h per allocation | 60 / 168 | **CONFIRMED** | |
+| A2b | Allocating to Closed, Cancelled or archived projects rejected; On hold allowed with a warning | | **CONFIRMED** | |
 | A3 | Tasks only assignable to people allocated to the project | | ASSUMPTION | |
-| A4 | The project's PM assigns PM Analysts to their own projects (and the PMO to any) | | ASSUMPTION | Stakeholder left open; default per lead |
 | A5 | Proposals on an archived/cancelled project are auto-rejected with the reason | | ASSUMPTION | Archived projects are read-only |
-| A6 | An Active project with no milestones shows Schedule Amber ("no milestones planned") | | ASSUMPTION | A plan without milestones cannot be shown as on track |
-| A7 | "No update for 7 days" = flag after more than 7 full days (8+), so a weekly cadence on the same weekday is not flagged | | ASSUMPTION | Boundary interpretation of a CONFIRMED rule |
-| S1 | 30-min tokens renewed while active; warn 1 min before expiry | | ASSUMPTION | 30-min expiry itself CONFIRMED |
+| A6 | An Active project with no milestones shows Schedule Amber ("no milestones planned") | | ASSUMPTION | |
+| A7 | "No update for 7 days" flags after more than 7 full days (8+) | | ASSUMPTION | Boundary reading of H10 |
+| A8 | A person's load for warnings = sum of their allocations overlapping the new allocation's period (conservative) | | ASSUMPTION | Never under-reports |
+| D0 | Departments: Finance, Human Resources, Operations, Sales, Marketing, Legal and Compliance, Customer Service, Supply Chain, in an editable table (existing data renamed in place) | | LEAD DECISION (ASSUMPTION) | |
+| D1 | Executive home leads with "Needs attention"/Red ("Off track"), then health by department and the other charts | | **CONFIRMED** | |
+| D1b | Auto-refresh every 60 s | 60 s | ASSUMPTION | |
+| D2 | Mobile: weekly status update, task/milestone updates and approvals work at 375 px; no offline mode | | LEAD DECISION (ASSUMPTION) | |
+| D3 | Portfolio default sort "Needs attention" (Red, Amber, Green, non-Active; flagged first; then priority; then budget) | | LEAD DECISION (ASSUMPTION) | |
+| S1 | 30-minute tokens renewed while active; warn 1 minute before expiry | | ASSUMPTION (expiry CONFIRMED) | |
 | S2 | Lockout 15 min after 5 failed sign-ins | 5 / 15 | ASSUMPTION | |
 | S3 | Reset issues a temporary password; change forced at next sign-in | | ASSUMPTION | |
-| C1 | Stale version → 409, UI names who changed it | | ASSUMPTION | |
-| D1 | **Executive home opens with the "Needs attention" queue and Red projects at the top, then health by department and the other charts** | | **CONFIRMED** | Stakeholder, 2026-11-19 |
-| D1b | Auto-refresh every 60 s | 60 s | ASSUMPTION | |
-| D2 | No offline mode | | ASSUMPTION | |
+| C1 | Stale version → 409 naming who changed it | | ASSUMPTION | |
+
+## Part C: Deliberate cuts (lead's decisions, 2026-11-19)
+
+Cut to deliver a deployed, tested MVP by the 16:00 freeze. Each cut lists what we would do next.
+
+| Cut | Why | Next step |
+|---|---|---|
+| Portfolio UI polish pass (summary tiles, row stripes, reason line, group headers, budget bar, sticky header, richer sidebar/header) | Lead swapped it for the minimum dashboard the brief requires | Build from the specification already written; reason summaries are already in the list API |
+| Weekly spend **entry screens and endpoints** (Budget tab, PMO record form, cumulative burn chart) | Time | The data model, Monday rule, unique week/category, seed history, budget health and the PMO "spend missing" queue item are live; add `GET/POST/DELETE /projects/{id}/spend` (upsert) and the Budget tab |
+| Budget-burn chart (weekly cumulative actual vs planned, monthly roll-up) | Time; the minimum dashboard uses a budget-against-plan table per department instead | Reuse engine metrics; add the weekly series endpoint |
+| PM Analyst and Admin queues in the UI | Lowest priority per lead | The API already returns both; the screen renders any role's items |
+| Health trends (sparklines, 8-week history) | Stretch | Snapshots are already stored on every change |
+| One-minute session-expiry warning | Time | 30-minute expiry, renewal while active and the 401 redirect are live |
+| `POST /users` idempotency | Time | Wrap the create in `beacon.idempotency.run` like other creates |
+| Admin access-audit **screen** | Time | `GET /api/users/audit` is live and tested |
+| Showing the original baseline / "Rebaselined" badge in the UI | Time | API returns `original_*`, `is_rebaselined` and history |
+| UI for PMO-only lifecycle and the rebaseline reason | Time | Enforced by the API (403/400 with clear messages); add the disabled select and reason field |
 
 ### Required-field justifications (lead's decisions, section 4 of the brief)
 - **Project:** name (unique, 3–120) = the identity people search by; department = health-by-department reporting;
@@ -201,7 +253,7 @@ Every threshold lives in `health_rules` / `beacon/config.py`, and code comments 
 - **Spend:** date (not future, within the project), amount > 0, category = budget dimension and burn reporting.
 - **Implementation addition:** optional `actual_start` on project (needed for the late-start rule, H2).
 
-### Open questions, ranked (after the 2026-11-19 confirmations)
+### Open questions, ranked (historical: written before the later confirmations; see Part B for current status)
 
 Ranked by how much the answer changes what we build or how much users will trust it.
 **Top 5 to take to the stakeholder now:**

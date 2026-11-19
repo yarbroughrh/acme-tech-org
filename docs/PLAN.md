@@ -20,13 +20,13 @@ enough to act on.
 
 | Capability | Admin | Portfolio Mgr | Project Mgr | Team member ⚠️ | Executive |
 |---|---|---|---|---|---|
-| Users, roles, password reset, unlock | ✅ | – | – | – | – |
-| View portfolio / projects / dashboards | read-only ⚠️ | all | all ⚠️ (open: all vs own); edit own | own tasks only ⚠️ (role open) | all, read-only |
+| Users, roles, password reset, unlock; access audit | ✅ | – | – | – | – |
+| View portfolio / projects / dashboards | **none (403)**, lead decision | all | all read-only, edit own (lead decision) | assigned projects (PM Analyst ✅) | all, read-only |
 | Create project, baseline dates & budget, assign PM | – | ✅ | – (⚠️ can't move baselines) | – | – |
 | Archive / cancel project | – | ✅ | – | – | – |
 | Edit project; CRUD milestones & tasks | – | ✅ | own | – | – |
 | Allocate people | – | ✅ | own | – | – |
-| Record actual spend ✅ | – | ✅ | – (403) | – | – |
+| Record actual spend, **weekly** ✅ | – | ✅ | – (403) | – | – |
 | Weekly status update (at least weekly ✅) | – | – | own | – | – |
 | Update status of own assigned tasks ⚠️ | – | – | ✅ | ✅ | – |
 | Override health | – | – | – | – | – |
@@ -153,6 +153,21 @@ re-evaluated when `health_as_of < today` (time alone moves elapsed%).
 | 4 | 14:30 | Allocations (40 h amber / 60 h reject, lifecycle rules) · spend entries (**PMO only** ✅; PM gets 403, no spend editing in PM UI) · people view |
 | 5 | 15:00 | Executive home **opens with the "Needs attention" queue, Red projects at the top** ✅, then health by department, then the other charts · PMO attention queue · role-aware home pages (portfolio search/filters already done in Slice 1) |
 | Freeze | 15:00–16:00 | Hardening, coverage, 375 px check, final deploy, smoke test on AWS, docs, push |
+
+## 7b. Delivery status (updated 2026-11-19, afternoon)
+
+| Slice | Status |
+|---|---|
+| 1 Sign-in, sessions, RBAC, Admin users, read-only portfolio | Done, deployed |
+| 2 PMO create/assign/archive/cancel; PM milestones, tasks, weekly updates; audit; idempotency; 409; **PM Analyst change requests** | Done, deployed |
+| 3 Health engine with reasons, flags, snapshots | Done, deployed (pulled into Slice 2, ADR-013) |
+| Decisions batch: confirmed thresholds; Admin 403 on project data; PMO-only lifecycle and rebaseline with reason; weekly spend model; departments | Backend done, deployed; some UI cut (DECISIONS Part C) |
+| 4 Allocations (40 h Amber, 60 h Red warning, no block) and People view | Done, deployed |
+| 5 "Your next actions" (all roles; ranking rule) and the minimum Executive dashboard | API deployed; UI in final integration |
+| Portfolio "Needs attention" default sort | Done, deployed |
+| Cut deliberately | Polish pass, weekly spend screens, budget-burn chart, health trends, 1-minute warning, see DECISIONS Part C |
+
+Services today: `auth`, `users`, `projects`, `change-requests`, `people`, `portfolio`, `me` (ADR-001, ADR-015).
 
 ## 8. Top risks
 

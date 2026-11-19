@@ -1,0 +1,9 @@
+[run]
+# Synced copies of the shared library are byte-identical to backend/_shared/beacon
+# (enforced by tests/test_shared_sync.py), so coverage is measured on the canonical source only.
+omit =
+    */tests/*
+    auth/beacon/*
+    users/beacon/*
+    projects/beacon/*
+    */beacon/*/beacon/*

@@ -13,19 +13,20 @@ Demo data only. The passwords satisfy the policy (12+ characters, upper, lower, 
 
 | Role | Email | Password | Lands on |
 |---|---|---|---|
-| Admin | admin@acme.example | `Beacon!Admin2026` | User management |
-| Portfolio Manager (PMO) | pmo@acme.example | `Beacon!Pmo2026` | Portfolio / attention queue |
-| Project Manager | pm@acme.example | `Beacon!Pm2026x` | My work: approvals waiting, my projects |
-| PM Analyst | analyst1@acme.example | `Beacon!Analyst2026` | My proposals |
-| PM Analyst | analyst2@acme.example | `Beacon!Analyst2027` | My proposals |
-| Executive | exec@acme.example | `Beacon!Exec2026` | Portfolio (dashboard in a later slice) |
+| Admin | admin@acme.example | `Beacon!Admin2026` | Your next actions (accounts), Users |
+| Portfolio Manager (PMO) | pmo@acme.example | `Beacon!Pmo2026` | Your next actions + portfolio overview |
+| Project Manager | pm@acme.example | `Beacon!Pm2026x` | Your next actions (approvals, updates, milestones) |
+| PM Analyst | analyst1@acme.example | `Beacon!Analyst2026` | Your next actions (rework, pending proposals) |
+| PM Analyst | analyst2@acme.example | `Beacon!Analyst2027` | Your next actions |
+| Executive | exec@acme.example | `Beacon!Exec2026` | Off-track queue, then the dashboard |
 
 Five failed sign-ins lock an account for 15 minutes; the Admin can unlock it.
 
 **Demo story in the data:** *Customer Portal Rebuild* (the PM reports Green, but the data says Red, so it shows
 Status mismatch), *Data Lake Modernisation* (spending ahead of delivery), *Payments Gateway Upgrade* (two late
-milestones), *Branch Network Refresh* (no status update for 12 days), and Priya Raman (allocated 58 h/week).
-Jordan Lee (PM) has PM Analyst proposals waiting for approval.
+milestones), *Branch Network Refresh* (no status update for 12 days and two weeks of spend missing), Priya Raman
+(58 h/week, Amber) and Marcus Webb (64 h/week, Red). Jordan Lee (PM) has PM Analyst proposals waiting; one
+account is locked for the Admin to unlock.
 
 ## Architecture
 
@@ -37,7 +38,10 @@ graph LR
   CF -->|/api/users*| U[λ users]
   CF -->|/api/projects*| P[λ projects]
   CF -->|/api/change-requests*| C[λ change-requests]
-  A & U & P & C -->|psycopg3, TLS| DB[(Aurora PostgreSQL 17)]
+  CF -->|/api/people*| PE[λ people]
+  CF -->|/api/portfolio*| PF[λ portfolio]
+  CF -->|/api/me*| ME[λ me: your next actions]
+  A & U & P & C & PE & PF & ME -->|psycopg3, TLS| DB[(Aurora PostgreSQL 17)]
   OPS[Operator] -.->|aws lambda invoke: seed| U
 ```
 
@@ -56,7 +60,7 @@ source ~/.bashrc
 ./bin/start-dev.sh                              # local: Postgres, LocalStack, Lambdas, proxy :3001, UI :3000
 
 python3.13 -m venv .venv && .venv/bin/pip install -r backend/requirements-dev.txt
-(cd backend && ../.venv/bin/pytest --cov=_shared/beacon --cov=auth --cov=users --cov=projects --cov=change-requests)
+(cd backend && ../.venv/bin/pytest --cov=_shared/beacon --cov=auth --cov=users --cov=projects --cov=change-requests --cov=me --cov=people --cov=portfolio)
 (cd frontend && npm test && npm run lint)
 
 ./bin/deploy.sh aws                             # sync shared lib, deploy backend, then frontend
@@ -69,7 +73,10 @@ source ENVIRONMENT.config && aws lambda invoke --function-name coding-workshop-u
 
 - [docs/PLAN.md](docs/PLAN.md): delivery plan, scope, architecture, data model, health rules
 - [docs/DECISIONS.md](docs/DECISIONS.md): ADRs and every business rule (CONFIRMED / ASSUMPTION)
-- [docs/PROGRESS.md](docs/PROGRESS.md): done, next, risks
+- [docs/PROGRESS.md](docs/PROGRESS.md): what's live, risks, click-through checklist
+- [docs/TESTING.md](docs/TESTING.md): what is tested, results, known gaps
+- [docs/PRODUCTION-READINESS.md](docs/PRODUCTION-READINESS.md): the path to production
+- [docs/AI-USAGE.md](docs/AI-USAGE.md): how AI was directed
 - [CLAUDE.md](CLAUDE.md): commands and gotchas for engineers
 - Workshop guides: [docs/README.md](docs/README.md)
 

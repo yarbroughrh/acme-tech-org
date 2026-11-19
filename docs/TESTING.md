@@ -55,5 +55,13 @@ differs from local (one defect, API 404s masked as 200, was only visible in the 
   and no "just below" case for every threshold.
 - **Frontend coverage** is lower on the larger page components than on utilities and the API client.
 
-## Results (final run)
-See the bottom of this file after the final run.
+## Results (final run, 2026-11-19 14:15, commit 4fb50a5)
+
+| Suite | Result | Coverage |
+|---|---|---|
+| Backend pytest | **348 passed, 0 failed, 0 skipped** | **97%** overall. CRUD/services: projects 98%, plan 100%, collaboration 100%, allocations 97%, spend 100%, users 99%, change requests 99%, work queue 95%, people 100%, portfolio 100%. Error handling: errors 100%, http 92%, validation 93%. Health engine 99%. |
+| Frontend Vitest | **195 passed, 0 failed** (26 files) | statements 88.7%, branches 82.5%, functions 81.7%, lines 90.4% |
+| Smoke (deployed CloudFront URL) | **58 passed, 0 failed** | Every role signs in; RBAC on projects, users, people, dashboard, spend, change requests, allocations; work queue per role; JSON 404 |
+| Live write checks (deployed) | Pass | Spend: Tuesday rejected, first save 201, same week and category 200 (updated), one entry; the test project was then archived |
+
+Lint (ESLint) clean; `npm run build` succeeds; `./bin/sync-shared.sh --check` reports no drift.

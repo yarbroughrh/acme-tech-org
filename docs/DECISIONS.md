@@ -226,21 +226,21 @@ rationale, pending stakeholder confirmation · **ASSUMPTION** = engineering defa
 | S3 | Reset issues a temporary password; change forced at next sign-in | | ASSUMPTION | |
 | C1 | Stale version → 409 naming who changed it | | ASSUMPTION | |
 
-## Part C: Deliberate cuts (lead's decisions, 2026-11-19)
+## Part C: Deliberate cuts (lead's decisions, 2026-11-19; final at the 14:50 feature stop)
 
 Cut to deliver a deployed, tested MVP by the 16:00 freeze. Each cut lists what we would do next.
 
 | Cut | Why | Next step |
 |---|---|---|
 | Portfolio UI polish pass (summary tiles, row stripes, reason line, group headers, budget bar, sticky header, richer sidebar/header) | Lead swapped it for the minimum dashboard the brief requires | Build from the specification already written; reason summaries are already in the list API |
-| Weekly spend **entry screens and endpoints** (Budget tab, PMO record form, cumulative burn chart) | Time | The data model, Monday rule, unique week/category, seed history, budget health and the PMO "spend missing" queue item are live; add `GET/POST/DELETE /projects/{id}/spend` (upsert) and the Budget tab |
 | Budget-burn chart (weekly cumulative actual vs planned, monthly roll-up) | Time; the minimum dashboard uses a budget-against-plan table per department instead | Reuse engine metrics; add the weekly series endpoint |
 | Health trends (sparklines, 8-week history) | Stretch | Snapshots are already stored on every change |
 | One-minute session-expiry warning | Time | 30-minute expiry, renewal while active and the 401 redirect are live |
 | `POST /users` idempotency | Time | Wrap the create in `beacon.idempotency.run` like other creates |
 | Admin access-audit **screen** | Time | `GET /api/users/audit` is live and tested |
 | Showing the original baseline / "Rebaselined" badge in the UI | Time | API returns `original_*`, `is_rebaselined` and history |
-| UI for PMO-only lifecycle and the rebaseline reason | Time | Enforced by the API (403/400 with clear messages); add the disabled select and reason field |
+| Deleting a weekly spend entry | Time; corrections are made by saving the same week and category again (upsert, audited) | Add a soft-delete endpoint and a confirm dialog |
+| Admin queue items for "users with no role" | Cannot occur: `users.role` is NOT NULL with a CHECK | None needed |
 
 ### Required-field justifications (lead's decisions, section 4 of the brief)
 - **Project:** name (unique, 3–120) = the identity people search by; department = health-by-department reporting;

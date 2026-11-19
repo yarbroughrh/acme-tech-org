@@ -6,4 +6,5 @@ omit =
     auth/beacon/*
     users/beacon/*
     projects/beacon/*
+    change-requests/beacon/*
     */beacon/*/beacon/*

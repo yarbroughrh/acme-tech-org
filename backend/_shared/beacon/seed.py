@@ -13,6 +13,7 @@ Story (section 11 of the brief):
 - a few On hold, Closed, Proposed and Cancelled projects; a healthy majority
 """
 
+import json
 import logging
 import math
 import random
@@ -89,8 +90,9 @@ class _Builder:
             return person_id
 
         accounts["pm"]["person_id"] = add_person(accounts["pm"]["display_name"], accounts["pm"]["id"], "Project Manager")
-        accounts["member"]["person_id"] = add_person(accounts["member"]["display_name"], accounts["member"]["id"], "Software Engineer")
-        people.append(accounts["member"]["person_id"])
+        accounts["analyst1"]["person_id"] = add_person(accounts["analyst1"]["display_name"], accounts["analyst1"]["id"], "PM Analyst")
+        accounts["analyst2"]["person_id"] = add_person(accounts["analyst2"]["display_name"], accounts["analyst2"]["id"], "PM Analyst")
+        people.append(accounts["analyst1"]["person_id"])
         for _ in range(cfg.EXTRA_PM_COUNT):
             full_name = names.pop()
             user_id = _id()
@@ -119,7 +121,7 @@ class _Builder:
         names = self.project_names()
         statuses = (["ON_HOLD"] * 6 + ["CLOSED"] * 6 + ["PROPOSED"] * 4 + ["CANCELLED"] * 3)
         demo_pm = accounts["pm"]["id"]
-        member_person = accounts["member"]["person_id"]
+        member_person = accounts["analyst1"]["person_id"]
         pmo_user = accounts["pmo"]["id"]
         for index, name in enumerate(names):
             story_key = next((k for k, v in STORY.items() if v == name), None)
@@ -315,24 +317,126 @@ _INSERTS = {
 }
 
 
+def _seed_v1(conn: Connection, today: date) -> dict[str, int]:
+    """Base portfolio: departments, users, people, projects and their plans, spend and updates."""
+    builder = _Builder(today)
+    builder.build()
+    counts = {}
+    with conn.cursor() as cur:
+        for table, sql in _INSERTS.items():
+            rows = builder.rows[table]
+            if rows:
+                cur.executemany(sql, rows)
+            counts[table] = len(rows)
+    return counts
+
+
+def _user_by_email(conn: Connection, email: str) -> dict | None:
+    return conn.execute("SELECT id, display_name FROM users WHERE lower(email) = lower(%s)", (email,)).fetchone()
+
+
+def _seed_v2(conn: Connection, today: date) -> dict[str, int]:
+    """PM Analysts (CONFIRMED role): accounts, assignments to the demo PM's projects, demo proposals.
+
+    Works on a fresh database (v1 already created the analysts) and on one seeded before the role
+    change (the legacy "member" demo account is upgraded to analyst1).
+    """
+    accounts = {a["key"]: a for a in cfg.DEMO_ACCOUNTS}
+    ids: dict[str, Any] = {}
+    for key in ("analyst1", "analyst2"):
+        acct = accounts[key]
+        user = _user_by_email(conn, acct["email"])
+        if user is None and key == "analyst1":
+            legacy = _user_by_email(conn, cfg.LEGACY_MEMBER_EMAIL)
+            if legacy is not None:
+                conn.execute("UPDATE users SET email = %s, display_name = %s, role = 'ANALYST', password_hash = %s, "
+                             "must_change_password = false, token_epoch = token_epoch + 1, version = version + 1 "
+                             "WHERE id = %s", (acct["email"], acct["display_name"], auth.hash_password(acct["password"]),
+                                               legacy["id"]))
+                user = legacy
+        if user is None:
+            user = conn.execute("INSERT INTO users (email, display_name, role, password_hash, must_change_password) "
+                                "VALUES (%s, %s, 'ANALYST', %s, false) RETURNING id",
+                                (acct["email"], acct["display_name"], auth.hash_password(acct["password"]))).fetchone()
+        ids[key] = user["id"]
+        if conn.execute("SELECT 1 FROM people WHERE user_id = %s", (user["id"],)).fetchone() is None:
+            conn.execute("INSERT INTO people (full_name, email, job_title, department_id, user_id) "
+                         "SELECT %s, %s, 'PM Analyst', (SELECT id FROM departments ORDER BY name LIMIT 1), %s",
+                         (acct["display_name"], acct["email"], user["id"]))
+    pm = _user_by_email(conn, accounts["pm"]["email"])
+    projects = {r["name"]: r for r in conn.execute(
+        "SELECT id, name, planned_start, planned_end FROM projects WHERE name = ANY(%s)", (list(STORY.values()),)).fetchall()}
+    assignments = {"analyst1": ["mismatch", "ahead", "steady"], "analyst2": ["overdue", "steady"]}
+    assigned = 0
+    for key, stories in assignments.items():
+        for story in stories:
+            project = projects.get(STORY[story])
+            if project is None:
+                continue
+            assigned += conn.execute(
+                "INSERT INTO project_analysts (project_id, user_id, assigned_by) SELECT %s, %s, %s WHERE NOT EXISTS "
+                "(SELECT 1 FROM project_analysts WHERE project_id = %s AND user_id = %s AND removed_at IS NULL)",
+                (project["id"], ids[key], pm["id"], project["id"], ids[key])).rowcount
+
+    def first_open_task(project: dict) -> dict | None:
+        return conn.execute("SELECT id, version, due_date FROM tasks WHERE project_id = %s AND status <> 'DONE' "
+                            "AND deleted_at IS NULL ORDER BY due_date NULLS LAST, id LIMIT 1", (project["id"],)).fetchone()
+
+    def first_open_milestone(project: dict) -> dict | None:
+        return conn.execute("SELECT id, version, due_date, percent_complete FROM milestones WHERE project_id = %s "
+                            "AND status <> 'COMPLETE' AND deleted_at IS NULL ORDER BY due_date, id LIMIT 1",
+                            (project["id"],)).fetchone()
+
+    def slip(project: dict, due: date, days: int) -> date:
+        moved = due + timedelta(days=days)
+        return moved if moved <= project["planned_end"] else due - timedelta(days=days)
+
+    proposals = []
+    portal, lake = projects.get(STORY["mismatch"]), projects.get(STORY["ahead"])
+    branch, hr = projects.get(STORY["overdue"]), projects.get(STORY["steady"])
+    if portal and (task := first_open_task(portal)):
+        proposals.append(("analyst1", portal, "TASK", task, {"status": "DONE"}, "Completed and demoed at sprint review."))
+    if lake and (ms := first_open_milestone(lake)):
+        proposals.append(("analyst1", lake, "MILESTONE", ms, {"due_date": slip(lake, ms["due_date"], 7).isoformat(),
+                          "notes": "Vendor delivery slipped; requesting a one-week move."}, "Vendor confirmed the new date."))
+    if branch and (task := first_open_task(branch)):
+        proposals.append(("analyst2", branch, "TASK", task, {"status": "IN_PROGRESS", "notes": "Site surveys started."}, None))
+    if hr and (task := first_open_task(hr)):
+        due = task["due_date"] or hr["planned_end"]
+        proposals.append(("analyst2", hr, "TASK", task, {"due_date": slip(hr, due, 5).isoformat()}, "Waiting on HR data extract."))
+    created = 0
+    for key, project, entity_type, entity, changes, note in proposals:
+        conn.execute("INSERT INTO change_requests (project_id, proposer_user_id, entity_type, entity_id, base_version, "
+                     "changes, note) VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s)",
+                     (project["id"], ids[key], entity_type, entity["id"], entity["version"], json.dumps(changes), note))
+        created += 1
+    if hr and (ms := first_open_milestone(hr)):  # one rejected proposal so "My proposals" shows a reason
+        conn.execute("INSERT INTO change_requests (project_id, proposer_user_id, entity_type, entity_id, base_version, changes, "
+                     "note, status, decided_by, decided_at, reason) VALUES (%s, %s, 'MILESTONE', %s, %s, %s::jsonb, %s, "
+                     "'REJECTED', %s, now(), %s)",
+                     (hr["id"], ids["analyst1"], ms["id"], ms["version"], json.dumps({"percent_complete": 95}),
+                      "Nearly done.", pm["id"], "UAT evidence doesn't support 95% yet. Resubmit after the UAT report."))
+        created += 1
+    return {"analysts_assigned": assigned, "change_requests": created}
+
+
+_STEPS = {"v1": _seed_v1, "v2": _seed_v2}
+
+
 def run_seed(conn: Connection, today: date | None = None) -> dict[str, Any]:
-    """Seed demo data once per SEED_VERSION. Returns a summary; never deletes anything."""
+    """Apply each pending seed version once (recorded in ``seed_runs``). Never deletes anything."""
     today = today or date.today()
+    applied: dict[str, Any] = {}
     with conn.transaction():
-        with conn.cursor() as cur:
-            cur.execute("SELECT pg_advisory_xact_lock(%s)", (_SEED_LOCK_ID,))
-            cur.execute("SELECT 1 FROM seed_runs WHERE version = %s", (cfg.SEED_VERSION,))
-            if cur.fetchone():
-                return {"status": "skipped", "reason": f"seed {cfg.SEED_VERSION} already applied"}
-            builder = _Builder(today)
-            builder.build()
-            counts = {}
-            for table, sql in _INSERTS.items():
-                rows = builder.rows[table]
-                if rows:
-                    cur.executemany(sql, rows)
-                counts[table] = len(rows)
-            cur.execute("INSERT INTO seed_runs (version) VALUES (%s)", (cfg.SEED_VERSION,))
-            audit.record(conn, None, "system", None, "SEED", after={"version": cfg.SEED_VERSION, **counts})
-    logger.info("seed applied", extra={"fields": {"counts": counts}})
-    return {"status": "applied", "version": cfg.SEED_VERSION, "counts": counts}
+        conn.execute("SELECT pg_advisory_xact_lock(%s)", (_SEED_LOCK_ID,))
+        done = {r["version"] for r in conn.execute("SELECT version FROM seed_runs").fetchall()}
+        for version in cfg.SEED_VERSIONS:
+            if version in done:
+                continue
+            applied[version] = _STEPS[version](conn, today)
+            conn.execute("INSERT INTO seed_runs (version) VALUES (%s)", (version,))
+            audit.record(conn, None, "system", None, "SEED", after={"version": version, **applied[version]})
+    if not applied:
+        return {"status": "skipped", "reason": "all seed versions already applied"}
+    logger.info("seed applied", extra={"fields": {"applied": list(applied)}})
+    return {"status": "applied", "versions": applied}

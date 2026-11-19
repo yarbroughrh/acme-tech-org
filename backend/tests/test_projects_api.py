@@ -5,7 +5,7 @@ import uuid
 import pytest
 
 
-@pytest.mark.parametrize("key, expected", [("admin", 200), ("pmo", 200), ("pm", 200), ("exec", 200), ("member", 403)])
+@pytest.mark.parametrize("key, expected", [("admin", 200), ("pmo", 200), ("pm", 200), ("exec", 200), ("analyst1", 200)])
 def test_portfolio_access_matrix(api, key, expected):
     assert api.call("GET", "/api/projects", token=api.token(key))[0] == expected
 
@@ -15,9 +15,14 @@ def test_portfolio_requires_auth(api):
     assert api.call("GET", "/api/projects/lookups")[0] == 401
 
 
-def test_pagination_and_total(api):
+def _live_projects(database) -> int:
+    return database.execute("SELECT count(*) AS n FROM projects WHERE archived_at IS NULL").fetchone()["n"]
+
+
+def test_pagination_and_total(api, database):
     status, body = api.call("GET", "/api/projects", token=api.token("exec"), query={"page": "2", "page_size": "50"})
-    assert status == 200 and body["total"] == 120 and len(body["items"]) == 50 and body["page"] == 2
+    # other tests add projects to the shared database, so compare with the database, not a constant
+    assert status == 200 and body["total"] == _live_projects(database) >= 120 and len(body["items"]) == 50 and body["page"] == 2
     item = body["items"][0]
     assert set(item) >= {"id", "name", "department", "pm", "planned_end", "approved_budget", "lifecycle_status",
                          "priority", "health_overall", "health_reasons", "flags", "version"}
@@ -31,7 +36,7 @@ def test_search_by_project_name_and_pm(api):
     assert body["total"] >= 4 and all(p["pm"]["display_name"] == "Jordan Lee" for p in body["items"])
 
 
-def test_filters_combine(api):
+def test_filters_combine(api, database):
     token = api.token("pmo")
     _, body = api.call("GET", "/api/projects", token=token, query={"lifecycle_status": "ON_HOLD,CLOSED", "page_size": "100"})
     assert body["total"] >= 6 and {p["lifecycle_status"] for p in body["items"]} <= {"ON_HOLD", "CLOSED"}
@@ -39,8 +44,13 @@ def test_filters_combine(api):
     dept = lookups["departments"][0]["id"]
     _, body = api.call("GET", "/api/projects", token=token, query={"department_id": dept, "priority": "HIGH", "page_size": "100"})
     assert all(p["department"]["id"] == dept and p["priority"] == "HIGH" for p in body["items"])
-    _, body = api.call("GET", "/api/projects", token=token, query={"health": "NONE", "page_size": "1"})
-    assert body["total"] == 120  # health is calculated from slice 3
+    _, active = api.call("GET", "/api/projects", token=token, query={"lifecycle_status": "ACTIVE", "page_size": "1"})
+    _, no_health = api.call("GET", "/api/projects", token=token, query={"health": "NONE", "page_size": "100"})
+    # health is calculated for Active projects only; every other project has none
+    assert no_health["total"] == _live_projects(database) - active["total"]
+    assert all(p["lifecycle_status"] != "ACTIVE" for p in no_health["items"])
+    _, red = api.call("GET", "/api/projects", token=token, query={"health": "RED", "page_size": "100"})
+    assert all(p["health_overall"] == "RED" and p["health_reasons"] for p in red["items"])
 
 
 @pytest.mark.parametrize("query", [{"lifecycle_status": "DONE"}, {"department_id": "x"}, {"sort": "id;drop"}, {"page_size": "0"}])
@@ -62,14 +72,34 @@ def test_detail_and_404(api):
     status, body = api.call("GET", f"/api/projects/{project_id}", token=token)
     assert status == 200 and body["project"]["name"] == "Data Lake Modernisation" and "description" in body["project"]
     assert api.call("GET", f"/api/projects/{uuid.uuid4()}", token=token)[0] == 404
-    assert api.call("GET", f"/api/projects/{project_id}", token=api.token("member"))[0] == 403
+    # PM Analysts only see projects they are assigned to (Data Lake is assigned to analyst1, not analyst2)
+    assert api.call("GET", f"/api/projects/{project_id}", token=api.token("analyst1"))[0] == 200
+    assert api.call("GET", f"/api/projects/{project_id}", token=api.token("analyst2"))[0] == 403
 
 
 def test_lookups(api):
     status, body = api.call("GET", "/api/projects/lookups", token=api.token("pm"))
-    assert status == 200 and len(body["departments"]) == 7 and len(body["project_managers"]) == 16
+    assert status == 200 and len(body["departments"]) == 7 and len(body["project_managers"]) >= 16
+    assert {a["display_name"] for a in body["analysts"]} == {"Sam Okafor", "Riley Chen"}
 
 
 def test_unknown_route_404_with_error_shape(api):
     status, body = api.call("DELETE", "/api/projects", token=api.token("pmo"))
     assert status == 404 and set(body["error"]) == {"code", "message", "details"}
+
+
+def test_analyst_portfolio_is_limited_to_assigned_projects(api, database):
+    status, body = api.call("GET", "/api/projects", token=api.token("analyst1"), query={"page_size": "100"})
+    assert status == 200
+    names = {p["name"] for p in body["items"]}
+    assert {"Customer Portal Rebuild", "Data Lake Modernisation", "HR Self-Service Portal"} <= names
+    assert "Payments Gateway Upgrade" not in names and "Branch Network Refresh" not in names
+    assigned = {r["name"] for r in database.execute(
+        "SELECT p.name FROM projects p JOIN project_analysts pa ON pa.project_id = p.id JOIN users u ON u.id = pa.user_id "
+        "WHERE u.email = 'analyst1@acme.example' AND pa.removed_at IS NULL AND p.archived_at IS NULL").fetchall()}
+    assert names == assigned
+
+
+def test_pm_mine_filter(api):
+    _, body = api.call("GET", "/api/projects", token=api.token("pm"), query={"mine": "true", "page_size": "100"})
+    assert body["total"] >= 4 and all(p["pm"]["display_name"] == "Jordan Lee" for p in body["items"])

@@ -1,5 +1,7 @@
 """Migrations and seed are idempotent and the seed tells the intended story (integration)."""
 
+from datetime import date
+
 from beacon import migrations, seed
 
 
@@ -16,8 +18,12 @@ def test_health_rules_seeded_unconfirmed(database):
 
 def test_seed_rerun_is_skipped_and_never_duplicates(database):
     before = database.execute("SELECT count(*) AS n FROM projects").fetchone()["n"]
-    assert seed.run_seed(database)["status"] == "skipped"
-    assert database.execute("SELECT count(*) AS n FROM projects").fetchone()["n"] == before == 120
+    assert seed.run_seed(database)["status"] == "skipped"  # every seed version already applied
+    assert database.execute("SELECT count(*) AS n FROM projects").fetchone()["n"] == before
+    seeded = database.execute("SELECT count(*) AS n FROM projects WHERE created_by = "
+                              "(SELECT id FROM users WHERE email = 'pmo@acme.example') AND name NOT LIKE '%% Test %%' "
+                              "AND name NOT LIKE 'CR Sandbox %%'").fetchone()["n"]
+    assert seeded == 120
 
 
 def test_seed_scale(database):
@@ -59,9 +65,9 @@ def test_story_mismatch_reports_green(database):
     assert row["reported_status"] == "GREEN"
 
 
-def test_demo_member_is_allocated_and_has_tasks(database):
+def test_demo_analyst_is_allocated_and_has_tasks(database):
     row = database.execute("SELECT count(*) AS n FROM tasks t JOIN people p ON p.id = t.assignee_person_id "
-                           "JOIN users u ON u.id = p.user_id WHERE u.email = 'member@acme.example'").fetchone()
+                           "JOIN users u ON u.id = p.user_id WHERE u.email = 'analyst1@acme.example'").fetchone()
     assert row["n"] >= 1
 
 
@@ -85,3 +91,29 @@ def test_seeded_spend_is_recorded_by_the_portfolio_manager(database):
     roles = database.execute("SELECT DISTINCT u.role FROM spend_entries s JOIN users u ON u.id = s.created_by").fetchall()
     assert [r["role"] for r in roles] == ["PMO"]
     assert database.execute("SELECT count(*) AS n FROM spend_entries WHERE created_by IS NULL").fetchone()["n"] == 0
+
+
+def test_seed_v2_analysts_and_proposals(database):
+    analysts = database.execute("SELECT email FROM users WHERE role = 'ANALYST' ORDER BY email").fetchall()
+    assert [a["email"] for a in analysts] == ["analyst1@acme.example", "analyst2@acme.example"]
+    counts = {r["status"]: r["n"] for r in database.execute(
+        "SELECT status, count(*) AS n FROM change_requests GROUP BY status").fetchall()}
+    assert counts.get("PENDING", 0) >= 3 and counts.get("REJECTED", 0) >= 1
+    assert database.execute("SELECT count(*) AS n FROM users WHERE role = 'MEMBER'").fetchone()["n"] == 0
+
+
+def test_seed_v2_upgrades_a_legacy_member_account(database):
+    """A database seeded before the role change (v1 had member@) is upgraded in place by v2."""
+    seed_module = seed
+    with database.transaction():
+        database.execute("SAVEPOINT legacy")
+        database.execute("DELETE FROM seed_runs WHERE version = 'v2'")
+        database.execute("UPDATE users SET email = 'member@acme.example' WHERE email = 'analyst1@acme.example'")
+        database.execute("DELETE FROM change_requests")
+        database.execute("DELETE FROM project_analysts")
+        result = seed_module._seed_v2(database, date.today())  # pylint: disable=protected-access
+        upgraded = database.execute("SELECT role FROM users WHERE email = 'analyst1@acme.example'").fetchone()
+        legacy_left = database.execute("SELECT 1 FROM users WHERE email = 'member@acme.example'").fetchone()
+        database.execute("ROLLBACK TO SAVEPOINT legacy")
+    assert upgraded["role"] == "ANALYST" and legacy_left is None
+    assert result["analysts_assigned"] == 5 and result["change_requests"] >= 4

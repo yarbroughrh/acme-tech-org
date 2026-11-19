@@ -72,18 +72,34 @@ def test_rbac_has_no_health_override_action():
     ("PM", "project.create", None),
     ("PM", "project.set_baseline", None),  # ASSUMPTION R5
     ("PMO", "project.create", rbac.ALL),
-    ("MEMBER", "project.read", None),      # ASSUMPTION R3
-    ("MEMBER", "task.update_own_status", rbac.OWN),
+    # PM Analyst (CONFIRMED): sees assigned projects, proposes, never edits directly
+    ("ANALYST", "project.read", rbac.OWN),
+    ("ANALYST", "change_request.propose", rbac.OWN),
+    ("ANALYST", "plan.edit", None),
+    ("ANALYST", "project.edit", None),
+    ("ANALYST", "status_update.submit", None),
+    ("ANALYST", "change_request.decide", None),
+    ("PM", "change_request.decide", rbac.OWN),
+    ("PMO", "change_request.decide", None),   # only the project's own PM decides
+    ("PM", "change_request.propose", None),
+    ("PM", "analyst.assign", rbac.OWN),
     ("PMO", "status_update.submit", None),
     # Only the Portfolio Manager records actual spend (CONFIRMED)
     ("PMO", "spend.record", rbac.ALL),
     ("PM", "spend.record", None),
     ("ADMIN", "spend.record", None),
     ("EXEC", "spend.record", None),
-    ("MEMBER", "spend.record", None),
+    ("ANALYST", "spend.record", None),
 ])
 def test_rbac_matrix(role, action, expected):
     assert rbac.scope_for(_principal(role), action) == expected
+
+
+def test_rbac_allowed_combines_scope_and_ownership():
+    assert rbac.allowed(_principal("PM"), "plan.edit", is_owner=True)
+    assert not rbac.allowed(_principal("PM"), "plan.edit", is_owner=False)
+    assert rbac.allowed(_principal("PMO"), "plan.edit", is_owner=False)
+    assert not rbac.allowed(_principal("EXEC"), "plan.edit", is_owner=True)
 
 
 def test_rbac_require_raises_403_and_owner_check():

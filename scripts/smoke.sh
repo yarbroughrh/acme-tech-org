@@ -13,10 +13,10 @@ FAIL=0
 
 command -v jq > /dev/null || { echo "ERROR: jq is required"; exit 2; }
 
-declare -A EMAILS=([admin]=admin@acme.example [pmo]=pmo@acme.example [pm]=pm@acme.example [member]=member@acme.example [exec]=exec@acme.example)
+declare -A EMAILS=([admin]=admin@acme.example [pmo]=pmo@acme.example [pm]=pm@acme.example [analyst]=analyst1@acme.example [exec]=exec@acme.example)
 declare -A PASSWORDS=(
   [admin]="${SMOKE_ADMIN_PASSWORD:-Beacon!Admin2026}" [pmo]="${SMOKE_PMO_PASSWORD:-Beacon!Pmo2026}"
-  [pm]="${SMOKE_PM_PASSWORD:-Beacon!Pm2026x}" [member]="${SMOKE_MEMBER_PASSWORD:-Beacon!Team2026}"
+  [pm]="${SMOKE_PM_PASSWORD:-Beacon!Pm2026x}" [analyst]="${SMOKE_ANALYST_PASSWORD:-Beacon!Analyst2026}"
   [exec]="${SMOKE_EXEC_PASSWORD:-Beacon!Exec2026}")
 declare -A TOKENS=()
 
@@ -47,7 +47,7 @@ done
 check "unauthenticated portfolio request is rejected" 401 "$status"
 
 echo "-- sign in as every role"
-for role in admin pmo pm member exec; do
+for role in admin pmo pm analyst exec; do
   body=$(jq -nc --arg e "${EMAILS[$role]}" --arg p "${PASSWORDS[$role]}" '{email:$e,password:$p}')
   read -r status json <<< "$(request POST /api/auth/login '' "$body")"
   check "sign in as $role" 200 "$status"
@@ -66,8 +66,8 @@ read -r status _ <<< "$(request POST /api/auth/refresh "${TOKENS[exec]}")"
 check "exec renews session" 200 "$status"
 
 echo "-- portfolio (role-based access)"
-declare -A EXPECT_PROJECTS=([admin]=200 [pmo]=200 [pm]=200 [member]=403 [exec]=200)
-for role in admin pmo pm member exec; do
+declare -A EXPECT_PROJECTS=([admin]=200 [pmo]=200 [pm]=200 [analyst]=200 [exec]=200)
+for role in admin pmo pm analyst exec; do
   read -r status json <<< "$(request GET '/api/projects?page_size=5' "${TOKENS[$role]}")"
   check "$role GET /api/projects" "${EXPECT_PROJECTS[$role]}" "$status"
 done
@@ -84,8 +84,8 @@ read -r status _ <<< "$(request GET '/api/projects?lifecycle_status=NOPE' "${TOK
 check "invalid filter is 400" 400 "$status"
 
 echo "-- user management (Admin only)"
-declare -A EXPECT_USERS=([admin]=200 [pmo]=403 [pm]=403 [member]=403 [exec]=403)
-for role in admin pmo pm member exec; do
+declare -A EXPECT_USERS=([admin]=200 [pmo]=403 [pm]=403 [analyst]=403 [exec]=403)
+for role in admin pmo pm analyst exec; do
   read -r status _ <<< "$(request GET /api/users "${TOKENS[$role]}")"
   check "$role GET /api/users" "${EXPECT_USERS[$role]}" "$status"
 done

@@ -9,7 +9,7 @@ def _email() -> str:
     return f"n{uuid.uuid4().hex[:10]}@acme.example"
 
 
-@pytest.mark.parametrize("key, expected", [("admin", 200), ("pmo", 403), ("pm", 403), ("member", 403), ("exec", 403)])
+@pytest.mark.parametrize("key, expected", [("admin", 200), ("pmo", 403), ("pm", 403), ("analyst1", 403), ("exec", 403)])
 def test_user_list_access_matrix(api, key, expected):
     assert api.call("GET", "/api/users", token=api.token(key))[0] == expected
 
@@ -48,7 +48,7 @@ def test_create_user_validation_and_duplicate(api):
     assert status == 409
 
 
-@pytest.mark.parametrize("key", ["pmo", "pm", "member", "exec"])
+@pytest.mark.parametrize("key", ["pmo", "pm", "analyst1", "exec"])
 def test_non_admin_cannot_create_users_privilege_escalation(api, key):
     status, _ = api.call("POST", "/api/users", {"email": _email(), "display_name": "X", "role": "ADMIN"},
                          token=api.token(key))

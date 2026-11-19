@@ -13,6 +13,7 @@ import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined'
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined'
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined'
 import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined'
+import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined'
 import { useAuth } from '../auth/AuthContext'
 import { ROLE_LABELS, navItemsFor } from '../auth/roles'
 
@@ -22,7 +23,8 @@ const ICONS = {
   approvals: FactCheckOutlinedIcon,
   proposals: AssignmentOutlinedIcon,
   portfolio: DashboardOutlinedIcon,
-  users: PeopleOutlinedIcon,
+  users: ManageAccountsOutlinedIcon,
+  people: PeopleOutlinedIcon,
 }
 
 /**

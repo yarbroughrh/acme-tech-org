@@ -11,6 +11,7 @@ import ChangePasswordPage from './pages/ChangePasswordPage'
 import PortfolioPage from './pages/PortfolioPage'
 import ProjectDetailPage from './pages/ProjectDetailPage'
 import UsersPage from './pages/UsersPage'
+import PeoplePage from './pages/PeoplePage'
 import PmHomePage from './pages/PmHomePage'
 import ApprovalsPage from './pages/ApprovalsPage'
 import MyProposalsPage from './pages/MyProposalsPage'
@@ -42,6 +43,7 @@ export function AppRoutes() {
       <Route path="/home" element={shell(<PmHomePage />, ['PM'])} />
       <Route path="/approvals" element={shell(<ApprovalsPage />, ['PM'])} />
       <Route path="/my-proposals" element={shell(<MyProposalsPage />, ['ANALYST'])} />
+      <Route path="/people" element={shell(<PeoplePage />, ['PMO', 'PM', 'EXEC'])} />
       <Route path="/users" element={shell(<UsersPage />, ['ADMIN'])} />
       <Route path="*" element={shell(<NotFoundPage />)} />
     </Routes>

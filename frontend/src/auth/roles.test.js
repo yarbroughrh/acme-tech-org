@@ -40,7 +40,17 @@ describe('role capabilities (UI mirror of backend RBAC)', () => {
     expect(homeFor('ANALYST')).toBe('/my-proposals')
     expect(homeFor('UNKNOWN')).toBe('/portfolio')
     expect(navItemsFor('ANALYST').map((i) => i.path)).toEqual(['/my-proposals', '/portfolio'])
-    expect(navItemsFor('PM').map((i) => i.path)).toEqual(['/home', '/approvals', '/portfolio'])
-    expect(navItemsFor('EXEC').map((i) => i.path)).toEqual(['/portfolio'])
+    expect(navItemsFor('PM').map((i) => i.path)).toEqual(['/home', '/approvals', '/portfolio', '/people'])
+    expect(navItemsFor('EXEC').map((i) => i.path)).toEqual(['/portfolio', '/people'])
+  })
+})
+
+describe('People navigation', () => {
+  it('shows People for PMO, PM and Executive only', () => {
+    expect(navItemsFor('PMO').map((i) => i.path)).toContain('/people')
+    expect(navItemsFor('PM').map((i) => i.path)).toContain('/people')
+    expect(navItemsFor('EXEC').map((i) => i.path)).toContain('/people')
+    expect(navItemsFor('ADMIN').map((i) => i.path)).not.toContain('/people')
+    expect(navItemsFor('ANALYST').map((i) => i.path)).not.toContain('/people')
   })
 })

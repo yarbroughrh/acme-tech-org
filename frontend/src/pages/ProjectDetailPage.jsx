@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import PropTypes from 'prop-types'
-import { Link as RouterLink, useParams } from 'react-router-dom'
+import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom'
 import {
   Alert, Box, Breadcrumbs, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Link, Paper,
   Stack, Tab, Tabs, TextField, Typography,
@@ -24,6 +24,7 @@ import PlanTab from './project/PlanTab'
 import StatusUpdatesTab from './project/StatusUpdatesTab'
 import AnalystsTab from './project/AnalystsTab'
 import AuditTab from './project/AuditTab'
+import TeamTab from './project/TeamTab'
 
 /** Cancel dialog with an optional reason. */
 function CancelProjectDialog({ open, busy, onCancel, onConfirm }) {
@@ -55,7 +56,13 @@ export default function ProjectDetailPage() {
   const { id } = useParams()
   const notify = useNotify()
   const [reloadKey, setReloadKey] = useState(0)
-  const [tab, setTab] = useState('overview')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = searchParams.get('tab') || 'overview'
+  const setTab = (value) => setSearchParams((prev) => {
+    const next = new URLSearchParams(prev)
+    next.set('tab', value)
+    return next
+  }, { replace: true })
   const [dialog, setDialog] = useState(null) // 'edit' | 'archive' | 'cancel'
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState(null)
@@ -118,6 +125,7 @@ export default function ProjectDetailPage() {
     { value: 'overview', label: 'Overview' },
     { value: 'plan', label: 'Milestones & tasks' },
     { value: 'status', label: 'Status updates' },
+    { value: 'team', label: 'Team' },
     ...(permissions.can_assign_analysts || analystCount > 0 ? [{ value: 'analysts', label: 'Analysts' }] : []),
     ...(permissions.can_view_audit ? [{ value: 'audit', label: 'Audit' }] : []),
   ]
@@ -164,6 +172,7 @@ export default function ProjectDetailPage() {
         {activeTab === 'overview' && <OverviewTab project={project} />}
         {activeTab === 'plan' && <PlanTab project={project} onChanged={reload} />}
         {activeTab === 'status' && <StatusUpdatesTab project={project} onChanged={reload} />}
+        {activeTab === 'team' && <TeamTab project={project} />}
         {activeTab === 'analysts' && <AnalystsTab project={project} lookups={lookups} />}
         {activeTab === 'audit' && <AuditTab project={project} />}
       </Box>

@@ -44,7 +44,7 @@ describe('routing and role guards', () => {
     await user.click(await screen.findByRole('button', { name: 'Open navigation' }))
     const nav = await screen.findAllByRole('navigation', { name: 'Main navigation' })
     const links = within(nav[0]).getAllByRole('link').map((a) => a.textContent)
-    expect(links).toEqual(['Portfolio'])
+    expect(links).toEqual(['Portfolio', 'People'])
   })
 
   it('redirects a role away from pages it may not use', async () => {

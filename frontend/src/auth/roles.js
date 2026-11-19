@@ -34,6 +34,7 @@ export const NAV_ITEMS = [
   { path: '/approvals', label: 'Approvals', icon: 'approvals', roles: ['PM'] },
   { path: '/my-proposals', label: 'My proposals', icon: 'proposals', roles: ['ANALYST'] },
   { path: '/portfolio', label: 'Portfolio', icon: 'portfolio', roles: PORTFOLIO_ROLES },
+  { path: '/people', label: 'People', icon: 'people', roles: ['PMO', 'PM', 'EXEC'] },
   { path: '/users', label: 'Users', icon: 'users', roles: ['ADMIN'] },
 ]
 

@@ -101,7 +101,10 @@ const server = http.createServer((req, res) => {
       'accept': headers.accept || 'application/json',
       'content-type': headers['content-type'] || 'application/json',
       'user-agent': headers['user-agent'] || 'proxy-server',
-      'host': target.host
+      'host': target.host,
+      // Beacon: forward auth and idempotency headers (CloudFront forwards these in the cloud)
+      ...(headers.authorization ? { 'authorization': headers.authorization } : {}),
+      ...(headers['idempotency-key'] ? { 'idempotency-key': headers['idempotency-key'] } : {})
     }
   };
 

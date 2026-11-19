@@ -256,3 +256,18 @@ tfplan
 
 # Snyk Security Extension - AI Rules (auto-generated)
 .github/instructions/snyk_rules.instructions.md
+
+# Beacon: commit the frontend lockfile for reproducible builds (ADR-009)
+!frontend/package-lock.json
+
+# Beacon: start-dev.sh pip-installs dependencies INTO each service folder for hot-reload.
+# Ignore everything in a service folder except our own files (whitelist).
+/backend/*/*
+!/backend/_examples/*
+!/backend/_shared/*
+!/backend/tests/*
+!/backend/*/function.py
+!/backend/*/*_service.py
+!/backend/*/*_repository.py
+!/backend/*/requirements.txt
+!/backend/*/beacon/

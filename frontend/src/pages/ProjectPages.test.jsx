@@ -88,7 +88,7 @@ describe('ChangePasswordPage', () => {
     await user.type(screen.getByLabelText(/Confirm new password/), 'Brand-New-Pass-2026')
     await user.click(screen.getByRole('button', { name: 'Change password' }))
     expect(authApi.changePassword).toHaveBeenCalledWith('Temp-Pass-123!', 'Brand-New-Pass-2026')
-    expect(await screen.findByRole('heading', { level: 1, name: 'My work' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Your next actions' })).toBeInTheDocument()
   })
 
   it('shows server policy errors', async () => {

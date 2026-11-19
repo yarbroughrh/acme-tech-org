@@ -18,9 +18,9 @@ const proposal = (overrides = {}) => ({
 describe('MyProposalsPage (PM Analyst home)', () => {
   afterEach(() => vi.clearAllMocks())
 
-  it('is the PM Analyst home and lists pending proposals first', async () => {
+  it('lists pending proposals first', async () => {
     crApi.listChangeRequests.mockResolvedValue({ items: [proposal()], page: 1, page_size: 20, total: 1 })
-    renderApp('/', USERS.ANALYST)
+    renderApp('/my-proposals', USERS.ANALYST)
     expect(await screen.findByRole('heading', { level: 1, name: 'My proposals' })).toBeInTheDocument()
     expect(await screen.findByText('Task: Build reports')).toBeInTheDocument()
     expect(crApi.listChangeRequests).toHaveBeenCalledWith({ view: 'mine', status: 'PENDING', page: 1, page_size: 20 })
@@ -45,6 +45,13 @@ describe('MyProposalsPage (PM Analyst home)', () => {
   it('is not available to other roles', async () => {
     crApi.listChangeRequests.mockResolvedValue({ items: [], page: 1, page_size: 20, total: 0 })
     renderApp('/my-proposals', USERS.PM)
-    expect(await screen.findByRole('heading', { level: 1, name: 'My work' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Your next actions' })).toBeInTheDocument()
+  })
+
+  it('opens on the status from the URL (work-queue links)', async () => {
+    crApi.listChangeRequests.mockResolvedValue({ items: [], page: 1, page_size: 20, total: 0 })
+    renderApp('/my-proposals?status=REJECTED', USERS.ANALYST)
+    await screen.findByText('No rejected proposals')
+    expect(crApi.listChangeRequests).toHaveBeenCalledWith({ view: 'mine', status: 'REJECTED', page: 1, page_size: 20 })
   })
 })

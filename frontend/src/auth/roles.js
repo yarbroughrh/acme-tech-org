@@ -16,21 +16,22 @@ export const ROLE_LABELS = {
   EXEC: 'Executive',
 }
 
-/** Landing page per role (slice 5 replaces the Executive and PMO homes with dashboards/queues). */
+/** Landing page per role: "Your next actions" for everyone. */
 export const ROLE_HOME = {
-  ADMIN: '/users',
-  EXEC: '/portfolio',
-  PMO: '/portfolio',
-  PM: '/home',
-  ANALYST: '/my-proposals',
+  ADMIN: '/next',
+  EXEC: '/next',
+  PMO: '/next',
+  PM: '/next',
+  ANALYST: '/next',
 }
 
 /** Roles that may open the portfolio and project pages (the backend filters what each sees). */
-export const PORTFOLIO_ROLES = ['ADMIN', 'PMO', 'PM', 'EXEC', 'ANALYST']
+// The Admin has no access to project data (lead decision): no Portfolio for ADMIN.
+export const PORTFOLIO_ROLES = ['PMO', 'PM', 'EXEC', 'ANALYST']
 
 /** Navigation entries and which roles see them. `icon` is a key resolved by AppShell. */
 export const NAV_ITEMS = [
-  { path: '/home', label: 'My work', icon: 'home', roles: ['PM'] },
+  { path: '/next', label: 'Your next actions', icon: 'next', roles: ['ADMIN', 'PMO', 'PM', 'ANALYST', 'EXEC'] },
   { path: '/approvals', label: 'Approvals', icon: 'approvals', roles: ['PM'] },
   { path: '/my-proposals', label: 'My proposals', icon: 'proposals', roles: ['ANALYST'] },
   { path: '/portfolio', label: 'Portfolio', icon: 'portfolio', roles: PORTFOLIO_ROLES },
@@ -47,9 +48,9 @@ export function navItemsFor(role) {
   return NAV_ITEMS.filter((item) => item.roles.includes(role))
 }
 
-/** @returns {string} home path for a role (falls back to /portfolio) */
+/** @returns {string} home path for a role (falls back to /next) */
 export function homeFor(role) {
-  return ROLE_HOME[role] || '/portfolio'
+  return ROLE_HOME[role] || '/next'
 }
 
 /**

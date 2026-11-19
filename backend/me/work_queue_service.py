@@ -244,7 +244,7 @@ def _admin_items(conn: Connection, now: datetime) -> list[dict]:
         before, after = (change["before"] or {}).get("role"), (change["after"] or {}).get("role")
         items.append(_item("ROLE_CHANGED", "due_soon", f"Role changed: {change['display_name']}",
                            f"Changed from {before or 'unknown'} to {after} on {change['at'].date().isoformat()}.",
-                           "Review access", "/access-audit", entity=f"{change['id']}:{change['at'].isoformat()}",
+                           "Review user", f"/users?q={change['email']}", entity=f"{change['id']}:{change['at'].isoformat()}",
                            event_at=change["at"]))
     return items
 

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import PropTypes from 'prop-types'
-import { Link as RouterLink } from 'react-router-dom'
+import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import {
   Alert, Box, Card, CardContent, Chip, Link, Paper, Stack, Tab, TablePagination, Tabs, Typography, useMediaQuery,
 } from '@mui/material'
@@ -59,7 +59,9 @@ ProposalCard.propTypes = { proposal: PropTypes.object.isRequired, compact: PropT
 export default function MyProposalsPage() {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
-  const [status, setStatus] = useState('PENDING')
+  const [params] = useSearchParams()
+  const initial = params.get('status')
+  const [status, setStatus] = useState(CHANGE_STATUS_LABELS[initial] ? initial : 'PENDING')
   const [page, setPage] = useState(0)
   const state = useApiQuery(
     () => listChangeRequests({ view: 'mine', status, page: page + 1, page_size: PAGE_SIZE }),

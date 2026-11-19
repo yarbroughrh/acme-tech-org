@@ -16,6 +16,7 @@ import PmHomePage from './pages/PmHomePage'
 import ApprovalsPage from './pages/ApprovalsPage'
 import MyProposalsPage from './pages/MyProposalsPage'
 import NotFoundPage from './pages/NotFoundPage'
+import NextActionsPage from './pages/NextActionsPage'
 
 /** Send the user to their role's home page. */
 function HomeRedirect() {
@@ -38,6 +39,7 @@ export function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/change-password" element={<RequireAuth><ChangePasswordPage /></RequireAuth>} />
       <Route path="/" element={<RequireAuth><HomeRedirect /></RequireAuth>} />
+      <Route path="/next" element={shell(<NextActionsPage />)} />
       <Route path="/portfolio" element={shell(<PortfolioPage />, PORTFOLIO_ROLES)} />
       <Route path="/portfolio/:id" element={shell(<ProjectDetailPage />, PORTFOLIO_ROLES)} />
       <Route path="/home" element={shell(<PmHomePage />, ['PM'])} />

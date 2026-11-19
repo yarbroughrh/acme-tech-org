@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import PropTypes from 'prop-types'
 import {
   Alert, Box, Button, Card, CardActions, CardContent, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
@@ -197,7 +198,8 @@ export default function UsersPage() {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const notify = useNotify()
-  const [search, setSearch] = useState('')
+  const [params] = useSearchParams()
+  const [search, setSearch] = useState(params.get('q') || '')
   const q = useDebouncedValue(search, 300)
   const [role, setRole] = useState('')
   const [page, setPage] = useState(0)

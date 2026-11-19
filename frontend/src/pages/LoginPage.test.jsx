@@ -16,7 +16,7 @@ function renderLogin() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/portfolio" element={<p>Portfolio home</p>} />
-          <Route path="/home" element={<p>PM home</p>} />
+          <Route path="/next" element={<p>Next actions home</p>} />
           <Route path="/change-password" element={<p>Change password screen</p>} />
         </Routes>
       </MemoryRouter>
@@ -49,7 +49,7 @@ describe('LoginPage', () => {
     expect(screen.getByRole('button', { name: /Signing in/ })).toBeDisabled()
     expect(screen.getByLabelText(/Email/)).toBeDisabled()
     resolveLogin({ token: 't', expires_at: '2099-01-01T00:00:00Z', user: { id: '1', role: 'PM', display_name: 'P', must_change_password: false } })
-    expect(await screen.findByText('PM home')).toBeInTheDocument()
+    expect(await screen.findByText('Next actions home')).toBeInTheDocument()
     expect(authApi.login).toHaveBeenCalledWith('pm@acme.example', 'Secret-password-1')
   })
 

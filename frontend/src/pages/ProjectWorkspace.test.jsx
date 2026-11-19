@@ -200,7 +200,7 @@ describe('PM home', () => {
       page: 1, page_size: 5, total: 3,
     })
     projectsApi.listProjects.mockResolvedValue({ items: [{ ...project(PERMS.PM) }], page: 1, page_size: 50, total: 1 })
-    renderApp('/', USERS.PM)
+    renderApp('/home', USERS.PM)
     expect(await screen.findByRole('heading', { level: 2, name: 'Approvals waiting (3)' })).toBeInTheDocument()
     expect(within(screen.getByTestId('approvals-count')).getByText('3')).toBeInTheDocument()
     expect(screen.getByText('Task: Build reports')).toBeInTheDocument()

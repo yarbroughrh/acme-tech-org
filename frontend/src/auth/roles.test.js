@@ -35,13 +35,11 @@ describe('role capabilities (UI mirror of backend RBAC)', () => {
   })
 
   it('routes roles home and filters navigation', () => {
-    expect(homeFor('ADMIN')).toBe('/users')
-    expect(homeFor('PM')).toBe('/home')
-    expect(homeFor('ANALYST')).toBe('/my-proposals')
-    expect(homeFor('UNKNOWN')).toBe('/portfolio')
-    expect(navItemsFor('ANALYST').map((i) => i.path)).toEqual(['/my-proposals', '/portfolio'])
-    expect(navItemsFor('PM').map((i) => i.path)).toEqual(['/home', '/approvals', '/portfolio', '/people'])
-    expect(navItemsFor('EXEC').map((i) => i.path)).toEqual(['/portfolio', '/people'])
+    for (const role of ['ADMIN', 'PMO', 'PM', 'ANALYST', 'EXEC']) expect(homeFor(role)).toBe('/next')
+    expect(homeFor('UNKNOWN')).toBe('/next')
+    expect(navItemsFor('ANALYST').map((i) => i.path)).toEqual(['/next', '/my-proposals', '/portfolio'])
+    expect(navItemsFor('PM').map((i) => i.path)).toEqual(['/next', '/approvals', '/portfolio', '/people'])
+    expect(navItemsFor('EXEC').map((i) => i.path)).toEqual(['/next', '/portfolio', '/people'])
   })
 })
 
@@ -52,5 +50,14 @@ describe('People navigation', () => {
     expect(navItemsFor('EXEC').map((i) => i.path)).toContain('/people')
     expect(navItemsFor('ADMIN').map((i) => i.path)).not.toContain('/people')
     expect(navItemsFor('ANALYST').map((i) => i.path)).not.toContain('/people')
+  })
+})
+
+describe('Admin navigation (lead decision: no project data for the Admin)', () => {
+  it('has no Portfolio or People for ADMIN, but has Your next actions and Users', () => {
+    const paths = navItemsFor('ADMIN').map((i) => i.path)
+    expect(paths).toEqual(expect.arrayContaining(['/next', '/users']))
+    expect(paths).not.toContain('/portfolio')
+    expect(paths).not.toContain('/people')
   })
 })

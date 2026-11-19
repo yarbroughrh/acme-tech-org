@@ -27,13 +27,8 @@ describe('routing and role guards', () => {
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
   })
 
-  it.each([
-    ['ADMIN', 'Users'],
-    ['EXEC', 'Portfolio'],
-    ['PMO', 'Portfolio'],
-    ['PM', 'My work'],
-    ['ANALYST', 'My proposals'],
-  ])('lands %s on their home page', async (role, heading) => {
+  it.each(['ADMIN', 'EXEC', 'PMO', 'PM', 'ANALYST'])('lands %s on "Your next actions"', async (role) => {
+    const heading = 'Your next actions'
     renderApp('/', USERS[role])
     expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeInTheDocument()
   })
@@ -44,12 +39,12 @@ describe('routing and role guards', () => {
     await user.click(await screen.findByRole('button', { name: 'Open navigation' }))
     const nav = await screen.findAllByRole('navigation', { name: 'Main navigation' })
     const links = within(nav[0]).getAllByRole('link').map((a) => a.textContent)
-    expect(links).toEqual(['Portfolio', 'People'])
+    expect(links).toEqual(['Your next actions', 'Portfolio', 'People'])
   })
 
   it('redirects a role away from pages it may not use', async () => {
     renderApp('/users', USERS.PM)
-    expect(await screen.findByRole('heading', { level: 1, name: 'My work' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Your next actions' })).toBeInTheDocument()
     expect(usersApi.listUsers).not.toHaveBeenCalled()
   })
 

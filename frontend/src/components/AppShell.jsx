@@ -2,10 +2,11 @@ import { useState } from 'react'
 import PropTypes from 'prop-types'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
-  AppBar, Box, Chip, Divider, Drawer, IconButton, List, ListItemButton, ListItemIcon,
+  AppBar, Badge, Box, Chip, Divider, Drawer, IconButton, List, ListItemButton, ListItemIcon,
   ListItemText, Toolbar, Tooltip, Typography, useMediaQuery,
 } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
+import { visuallyHidden } from '@mui/utils'
 import MenuIcon from '@mui/icons-material/Menu'
 import LogoutIcon from '@mui/icons-material/Logout'
 import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined'
@@ -14,11 +15,14 @@ import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined'
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined'
 import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined'
 import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined'
+import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined'
 import { useAuth } from '../auth/AuthContext'
 import { ROLE_LABELS, navItemsFor } from '../auth/roles'
+import { WorkQueueProvider, useWorkQueue } from './WorkQueueProvider'
 
 const DRAWER_WIDTH = 232
 const ICONS = {
+  next: ChecklistOutlinedIcon,
   home: HomeOutlinedIcon,
   approvals: FactCheckOutlinedIcon,
   proposals: AssignmentOutlinedIcon,
@@ -31,13 +35,35 @@ const ICONS = {
  * Application frame: app bar, role-filtered navigation (permanent drawer on desktop,
  * temporary drawer on small screens) and a skip link to the main content.
  */
+/**
+ * Badge counts for navigation entries, from the shared work queue: critical + high actions on
+ * "Your next actions"; approvals waiting on "Approvals".
+ * @returns {Record<string, number>}
+ */
+function useNavBadges() {
+  const queue = useWorkQueue()
+  const data = queue?.data
+  if (!data) return {}
+  return {
+    '/next': (data.counts?.critical || 0) + (data.counts?.high || 0),
+    '/approvals': (data.items || []).filter((i) => i.type === 'APPROVAL_WAITING').length,
+  }
+}
+
+/** Application frame with the shared work-queue provider (refreshed on every route change). */
 export default function AppShell({ children }) {
+  return <WorkQueueProvider><Frame>{children}</Frame></WorkQueueProvider>
+}
+
+
+function Frame({ children }) {
   const theme = useTheme()
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'))
   const [mobileOpen, setMobileOpen] = useState(false)
   const { user, logout } = useAuth()
   const location = useLocation()
   const items = navItemsFor(user?.role)
+  const badges = useNavBadges()
 
   const nav = (
     <Box component="nav" aria-label="Main navigation">
@@ -55,8 +81,17 @@ export default function AppShell({ children }) {
               aria-current={selected ? 'page' : undefined}
               onClick={() => setMobileOpen(false)}
             >
-              <ListItemIcon sx={{ minWidth: 40 }}><Icon aria-hidden="true" /></ListItemIcon>
-              <ListItemText primary={item.label} />
+              <ListItemIcon sx={{ minWidth: 40 }}>
+                {badges[item.path] ? (
+                  <Badge badgeContent={badges[item.path]} color="error" max={99} aria-hidden="true">
+                    <Icon />
+                  </Badge>
+                ) : <Icon aria-hidden="true" />}
+              </ListItemIcon>
+              <ListItemText
+                primary={item.label}
+                secondary={badges[item.path] ? <Box component="span" sx={visuallyHidden}>{`${badges[item.path]} need attention`}</Box> : null}
+              />
             </ListItemButton>
           )
         })}
@@ -137,3 +172,5 @@ export default function AppShell({ children }) {
 }
 
 AppShell.propTypes = { children: PropTypes.node.isRequired }
+
+Frame.propTypes = { children: PropTypes.node.isRequired }

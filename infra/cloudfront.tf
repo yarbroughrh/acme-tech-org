@@ -39,12 +39,8 @@ resource "aws_cloudfront_distribution" "this" {
     }
   }
 
-  custom_error_response {
-    error_code            = 404
-    error_caching_min_ttl = 300
-    response_code         = 200
-    response_page_path    = "/index.html"
-  }
+  # Beacon: the SPA uses HashRouter, so no 404 -> index.html rewrite is needed. That rewrite applied to
+  # the whole distribution and turned every API 404 into a cached 200 HTML page (found in the evidence pass).
 
   # logging_config {
   #   include_cookies = false

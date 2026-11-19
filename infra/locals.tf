@@ -1,5 +1,5 @@
 locals {
-  app_id = try(trimspace(var.aws_app_code), "") != "" ? trimspace(var.aws_app_code) : random_id.this.hex
+  app_id   = try(trimspace(var.aws_app_code), "") != "" ? trimspace(var.aws_app_code) : random_id.this.hex
   app_tags = { participant = local.app_id, event = random_id.this.hex }
   public_route_table_ids = [
     for rt in data.aws_route_table.this :
@@ -49,9 +49,16 @@ locals {
       npm_requirements = true
     }
   }
+  # Beacon: per-function memory overrides (MB). Lambda CPU scales with memory; the auth
+  # function hashes passwords with PBKDF2-SHA256 at 600k iterations (OWASP), which takes
+  # ~4 s at 128 MB. 1769 MB = one full vCPU. All other functions keep the 128 MB default.
+  lambda_memory_overrides = {
+    auth = 1769
+  }
   backend_names_python = {
     for name in local.backend_dirs_python : name => {
       name             = name
+      memory_size      = lookup(local.lambda_memory_overrides, name, 128)
       arch             = "x86_64"
       runtime          = "python3.13"
       handler          = "function.handler"
